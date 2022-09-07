@@ -15,7 +15,7 @@
 
          ;; FUNCTIONS
          curry curyr
-         flip tuply arged unary
+         flip tuply arged unary zary
          compose compose * ○ ○*
          opp
          valued listed listed*
@@ -45,6 +45,10 @@
          intersperse flatten
          cartesian-product ×
          range qsort rearrange
+
+         ;; FILES
+         read-file
+         write-file
 
          ;; MISC
          displayln print puts
@@ -224,6 +228,8 @@
 (define (unary f)
   (lambda x (f (car x))))
 
+(define (zary f)
+  (thunk (f)))
 
 (define-values (compose compose*)
   (let ((○ (lambda (f g)
@@ -602,6 +608,22 @@
        (map (curry (curry elt)) order)
        (replicate (length order) xs)))
 
+;; FILE
+
+(define (read-file f)
+  (with-input-from-file f read))
+
+(define (write-file f x)
+  (with-output-to-file f
+    (thunk (write x))))
+
+(define-macro (with-input-from f . body)
+  (with-input-from-file f
+    (thunk . body)))
+
+(define-macro (with-output-to f . body)
+  (with-output-to-file f
+    (thunk . body)))
 
 ;; MISC
 
