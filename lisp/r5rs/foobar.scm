@@ -49,6 +49,8 @@
          ;; FILES
          read-file
          write-file
+         with-input-from
+         with-output-to
 
          ;; MISC
          displayln print puts
