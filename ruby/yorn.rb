@@ -61,6 +61,16 @@ end
 
 ### Stdlib Class additions
 
+class Integer
+  def second() self end
+  def minute() self * 60.second end
+  def hour() self * 60.minute end
+  def day() self * 24.hour end
+  def week() self * 7.day end
+  def month() self * 4.week end
+  def year() self * 12.month end
+end
+
 class Hash
   def flip
     x = {}
@@ -77,7 +87,6 @@ class String
     self.chars.drop_while(&f).reverse.drop_while(&f).reverse.join
   end
 end
-
 
 ### Main Classes
 
@@ -132,54 +141,89 @@ class Yornal
       # git shit here
       f = [entryParent,
            (Dir.children(entryParent)
-              .find {|e| t.send(@type).to_s == e} or t.send(@type).to_s)
+             .find {|e| t.send(@type).to_s == e} or t.send(@type).to_s)
           ].join('/')
       system "#{editor} #{f}"
       # git shit here
     end
   end
 
+  def entries()
+    self.filter('*').map { |e| Entry.fromPath e }
+  end
+
   # e.g. pattern: */*/8, 2022/aug/*, */*/*/*/* ; depends on yornal type (depth)
+  # TODO: add support for nested yornals
   def filter(pattern)
     dateStructure = [:year, :month, :day, :hour, :min]
     f = -> s { s.zip(dateStructure).to_h.flip }
 
     tree(path()).filter do |e|
-      foo = f.(e[$yornalPath.size + @name.size + 1 ..].split('/').filter {|x| not x.empty? })
+      foo = f.(e[$yornalPath.size + @name.size + 1 ..].strip_by('/').split('/'))
       bar = f.(pattern.downcase.strip_by('/').split('/'))
 
       bar.map do |k,v|
-        if k == :month
-          (not foo[k]) or
-            ((@@months.filter {|j| j =~ Regexp.new(v)}.values.map(&:to_s) + [v]).any? (foo[k]))
-        else
-          (not foo[k]) or (v == '*') or (v == foo[k])
-        end
-      end
-        .all? true
+        (not foo[k]) or (v == '*') or
+          v.split(',').map do |x|
+          l, r = x.split('-')
+          (l .. (r or l))
+        end.any? {|r| r.include? foo[k]}
+      end.all? true
     end
   end
 
-  def last(x)
+  # last(:year, n = 3) ; last 3 years,
+  def last(x, n = 1, from = nil)
+    return (from or entries())[(-n) ..] if (not x)
+
+    t = from ? from[-1].to_t : Time.now
+    k = t - n.send(x)
+    (from or entries()).filter {|e| e > k}
   end
 end
 
 
-def main
-  opts = Optimist::options do
+class Entry
+  include Comparable
+  attr_reader :pdate, :yornal # pseudo date, yornal (obj or name)
+
+  def <=>(x)
+    (to_t() <=> ((x.is_a? Entry) ? x.to_t : x))
   end
 
-  xdg_data_home = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
-  path = (ENV["YORNAL_PATH"] or xdg_data_home or "~/.yornal")
-  $yornalPath = File.expand_path path
+  def Entry.fromPath(p)
+    yornal, *pdate = p[$yornalPath.size ..].strip_by('/').split('/')
+    Entry.new(pdate.join('/'), yornal)
+  end
 
-  if File.exist? $yornalPath
-    if not File.directory? $yornalPath
-      exitError("'%s' for yornal storage is not a directory", $yornalPath)
-    end
-  else
-    mkdir $yornalPath
+  def initialize(date, yornal)
+    @yornal = (yornal.is_a? Yornal) ? yornal : Yornal.new(yornal)
+    @pdate = (date.is_a? Time) ? date.to_a[..5].drop_while{|i| i == 0}.reverse.join('/') : date
+  end
+
+  def path
+    @yornal.path() + "/" + @pdate
+  end
+
+  def to_t
+    Time.new(*@pdate.split('/'))
   end
 end
 
-main()
+
+### Main
+
+opts = Optimist::options do
+end
+
+xdg_data_home = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
+path = (ENV["YORNAL_PATH"] or xdg_data_home or "~/.yornal")
+$yornalPath = File.expand_path path
+
+if File.exist? $yornalPath
+  if not File.directory? $yornalPath
+    exitError("'%s' for yornal storage is not a directory", $yornalPath)
+  end
+else
+  mkdir $yornalPath
+end
