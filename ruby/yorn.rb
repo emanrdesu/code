@@ -86,6 +86,10 @@ class String
     f = -> c { words.include? c }
     self.chars.drop_while(&f).reverse.drop_while(&f).reverse.join
   end
+
+  def stlip(c)
+    self.strip_by(c).split(c)
+  end
 end
 
 ### Main Classes
@@ -152,15 +156,15 @@ class Yornal
     self.filter('*').map { |e| Entry.fromPath e }
   end
 
-  # e.g. pattern: */*/8, 2022/aug/*, */*/*/*/* ; depends on yornal type (depth)
+  # e.g. pattern: */*/8, 2022/09/*, */*/*/*/* ; depends on yornal type (depth)
   # TODO: add support for nested yornals
   def filter(pattern)
     dateStructure = [:year, :month, :day, :hour, :min]
     f = -> s { s.zip(dateStructure).to_h.flip }
 
     tree(path()).filter do |e|
-      foo = f.(e[$yornalPath.size + @name.size + 1 ..].strip_by('/').split('/'))
-      bar = f.(pattern.downcase.strip_by('/').split('/'))
+      foo = f.(e[$yornalPath.size + @name.size + 1 ..].stlip('/'))
+      bar = f.(pattern.downcase.stlip('/'))
 
       bar.map do |k,v|
         (not foo[k]) or (v == '*') or
@@ -174,7 +178,7 @@ class Yornal
 
   # last(:year, n = 3) ; last 3 years,
   def last(x, n = 1, from = nil)
-    return (from or entries())[(-n) ..] if (not x)
+    return (from or entries())[(-n) ..] if (x == :number)
 
     t = from ? from[-1].to_t : Time.now
     k = t - n.send(x)
@@ -192,7 +196,7 @@ class Entry
   end
 
   def Entry.fromPath(p)
-    yornal, *pdate = p[$yornalPath.size ..].strip_by('/').split('/')
+    yornal, *pdate = p[$yornalPath.size ..].stlip('/')
     Entry.new(pdate.join('/'), yornal)
   end
 
@@ -216,8 +220,8 @@ end
 opts = Optimist::options do
 end
 
-xdg_data_home = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
-path = (ENV["YORNAL_PATH"] or xdg_data_home or "~/.yornal")
+data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
+path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
 $yornalPath = File.expand_path path
 
 if File.exist? $yornalPath
