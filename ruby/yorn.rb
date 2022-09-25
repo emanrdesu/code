@@ -156,29 +156,31 @@ class Yornal
     self.filter('*').map { |e| Entry.fromPath e }
   end
 
-  # e.g. pattern: */*/8, 2022/09/*, */*/*/*/* ; depends on yornal type (depth)
-  # TODO: add support for nested yornals
+  # e.g. pattern: */*/8, 2022/09/* ; depends on yornal type (depth)
   def filter(pattern)
     dateStructure = [:year, :month, :day, :hour, :min]
     f = -> s { s.zip(dateStructure).to_h.flip }
 
     tree(path()).filter do |e|
-      foo = f.(e[$yornalPath.size + @name.size + 1 ..].stlip('/'))
-      bar = f.(pattern.downcase.stlip('/'))
+      qux = e[$yornalPath.size + @name.size + 1 ..]
+      unless qux.downcase =~ /[a-z]/ # remove nested yornals
+        foo = f.(qux.stlip('/'))
+        bar = f.(pattern.downcase.stlip('/'))
 
-      bar.map do |k,v|
-        (not foo[k]) or (v == '*') or
-          v.split(',').map do |x|
-          l, r = x.split('-')
-          (l .. (r or l))
-        end.any? {|r| r.include? foo[k]}
-      end.all? true
+        bar.map do |k,v|
+          (not foo[k]) or (v == '*') or
+            v.split(',').map do |x|
+            l, r = x.split('-')
+            (l .. (r or l))
+          end.any? {|r| r.include? foo[k]}
+        end.all? true
+      end
     end
   end
 
   # last(:year, n = 3) ; last 3 years,
   def last(x, n = 1, from = nil)
-    return (from or entries())[(-n) ..] if (x == :number)
+    return (from or entries())[(-n) ..] if (x == :entry)
 
     t = from ? from[-1].to_t : Time.now
     k = t - n.send(x)
