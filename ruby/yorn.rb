@@ -165,7 +165,8 @@ class Yornal
 
     tree(path()).filter do |e|
       qux = e[$yornalPath.size + @name.size + 1 ..]
-      unless qux =~ /\D/ # remove nested yornals
+      puts(qux)
+      unless qux.split('/').join =~ /\D/ # remove nested yornals
         foo = f.(qux.stlip('/'))
         bar = f.(pattern.downcase.stlip('/'))
 
