@@ -30,9 +30,11 @@ def yes_or_no?(q, pre=nil, post=nil)
   end
 end
 
-def directoryDepth (dir)
+def yornal_depth (dir)
   return 0 if not File.directory? dir
-  Dir.children(dir).map {|i| 1 + directoryDepth([dir, i].join('/'))}.max or 1
+  Dir.children(dir)
+    .filter {|i| i =~ /[0-9]/} # remove nested yornals
+    .map {|i| 1 + yornal_depth([dir, i].join('/'))}.max or 1
 end
 
 def tree (dir)
@@ -126,7 +128,7 @@ class Yornal
 
   def initialize(name)
     @name = name
-    @type = @@depth.flip[directoryDepth(path())]
+    @type = @@depth.flip[yornal_depth(path())]
   end
 
   def path
@@ -217,7 +219,7 @@ class Entry
 end
 
 
-### Main
+### main
 
 opts = Optimist::options do
 end
