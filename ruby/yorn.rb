@@ -2,15 +2,13 @@
 
 ### yorn is a program for managing journals (yornals)
 ### uses git for version control
-### TODO: finish first version of program
 ### TODO: add documentation
 ### FUTURE: second version will implement encryption
-### This is early preliminary code, much to be done
 
 require 'optimist'
+require 'openssl'
 
-
-### Utility Functions
+### utility Functions
 
 def alnum?(x)
   x =~ /\A\p{Alnum}+\z/
@@ -43,7 +41,8 @@ end
 
 def editor
   editors = ["zile", "ed", "nano", "vi", "emacs", "vim", "code"]
-  ENV["EDITOR"] or editors.find {|b| File.exists? "/usr/bin/#{b}"} or "cat"
+  path = ENV["PATH"].split(':')
+  ENV["EDITOR"] or editors.find {|b| path.any? {|p| File.exist? "#{p}/#{b}"}} or "cat"
 end
 
 def mkdir(path)
@@ -60,8 +59,7 @@ def exitError(message, *args)
 end
 
 
-
-### Stdlib Class additions
+### stdlib class additions
 
 class Integer
   def second() self end
