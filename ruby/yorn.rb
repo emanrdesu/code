@@ -33,7 +33,7 @@ end
 def yornal_depth (dir)
   return 0 if not File.directory? dir
   Dir.children(dir)
-    .filter {|i| not (i.downcase =~ /[a-z]/)} # remove nested yornals
+    .filter {|i| not (i =~ /\D/)} # remove nested yornals
     .map {|i| 1 + yornal_depth([dir, i].join('/'))}.max or 1
 end
 
@@ -165,7 +165,7 @@ class Yornal
 
     tree(path()).filter do |e|
       qux = e[$yornalPath.size + @name.size + 1 ..]
-      unless qux.downcase =~ /[a-z]/ # remove nested yornals
+      unless qux =~ /\D/ # remove nested yornals
         foo = f.(qux.stlip('/'))
         bar = f.(pattern.downcase.stlip('/'))
 
