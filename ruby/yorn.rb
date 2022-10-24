@@ -8,7 +8,21 @@
 require 'optimist'
 require 'openssl'
 
+### globals
+
+# static
+DEPTH = {
+  box:   0,
+  year:  1,
+  month: 2,
+  day:   3,
+  hour:  4,
+  min:   5
+}
+
 ### utility Functions
+
+alias m method
 
 def alnum?(x)
   x =~ /\A\p{Alnum}+\z/
@@ -36,7 +50,11 @@ def yornal_depth (dir)
 end
 
 def tree (dir)
-  (File.directory? dir) ? Dir.children(dir).map {|f| tree [dir,f].join('/')}.flatten : [dir]
+  if (File.directory? dir)
+    Dir.children(dir).map {|f| tree [dir,f].join('/')}.flatten
+  else
+    [dir]
+  end
 end
 
 def editor
@@ -46,16 +64,12 @@ def editor
 end
 
 def mkdir(path)
-  if system "mkdir -p #{path} > /dev/null"
-    puts "Created #{path}."
-  else
+  system "mkdir -p #{path} > /dev/null" or
     exitError("could not create directory '%s'", path)
-  end
 end
 
 def exitError(message, *args)
-  printf "Error, " + message + ".\n", *args
-  exit 1
+  STDERR.printf "error: " + message + ".\n", *args ; exit 1
 end
 
 
@@ -81,10 +95,28 @@ class Hash
   end
 end
 
+class Time
+  def box() '' end
+
+  def path(x)
+    # only first 5 elements are relevant (m,h,d,mon,y)
+    self.to_a[..5].reverse.take([0, DEPTH[x] - 1].max).join('/')
+  end
+end
+
 class String
-  def strip_by(words)
-    f = -> c { words.include? c }
-    self.chars.drop_while(&f).reverse.drop_while(&f).reverse.join
+  def lstrip_by(chars)
+    f = -> c { chars.include? c }
+    self.chars.drop_while(&f).join
+  end
+
+  def rstrip_by(chars)
+    f = -> c { chars.include? c }
+    self.chars.reverse.drop_while(&f).reverse.join
+  end
+
+  def strip_by(chars)
+    self.lstrip_by(chars).rstrip_by(chars)
   end
 
   def stlip(c)
@@ -92,41 +124,28 @@ class String
   end
 end
 
-### Main Classes
+### git functions
+
+### main classes
 
 class Yornal
-  @@depth = {
-    box:   0,
-    year:  1,
-    month: 2,
-    day:   3,
-    hour:  4,
-    min:   5
-  }
-
-  @@months = {
-    january: 1,
-    february: 2,
-    march: 3,
-    april: 4,
-    may: 5,
-    june: 6,
-    july: 7,
-    august: 8,
-    september: 9,
-    october: 10,
-    november: 11,
-    december: 12
-  }
-
   attr_reader :name, :type
 
   def Yornal.create(name, type)
+    (name =~ /[_A-za-z]/) or exitError("name must contain a letter or underscore")
+
+    if type == :box
+      File.open($yornalPath + '/' + name, "w") {}
+    else
+      mkdir [$yornalPath, name, Time.now.path(type)].join('/')
+    end
+
+    STDERR.puts "created yornal '#{name}'"
   end
 
   def initialize(name)
     @name = name
-    @type = @@depth.flip[yornal_depth(path())]
+    @type = DEPTH.flip[yornal_depth(path())]
   end
 
   def path
@@ -134,26 +153,16 @@ class Yornal
   end
 
   def edit
-    if @type == :box
-      system "#{editor} #{path}"
-      # git shit here
-    else
-      t = Time.now
-      # only first 5 elements are relevant (m,h,d,mon,y)
-      entryParent = path() + t.to_a[..5].reverse.take(@@depth[@type] - 1).join("/")
-      mkdir(entryParent)
-      # git shit here
-      f = [entryParent,
-           (Dir.children(entryParent)
-             .find {|e| t.send(@type).to_s == e} or t.send(@type).to_s)
-          ].join('/')
-      system "#{editor} #{f}"
-      # git shit here
-    end
+    t = Time.now
+    entryParent = [path, t.path(@type)].join('/').rstrip_by('/')
+    mkdir(entryParent) unless @type == :box
+    entry = [entryParent, t.send(@type).to_s].join('/').rstrip_by('/')
+    system "#{editor} #{entry}"
+    # git shit here
   end
 
   def entries()
-    self.filter('*').map { |e| Entry.fromPath e }
+    self.filter('*').map { |p| Entry.fromPath p }
   end
 
   # e.g. pattern: */*/8, 2022/09/* ; depends on yornal type (depth)
@@ -163,7 +172,6 @@ class Yornal
 
     tree(path()).filter do |e|
       qux = e[$yornalPath.size + @name.size + 1 ..]
-      puts(qux)
       unless qux.split('/').join =~ /\D/ # remove nested yornals
         foo = f.(qux.stlip('/'))
         bar = f.(pattern.downcase.stlip('/'))
@@ -181,11 +189,11 @@ class Yornal
 
   # last(:year, n = 3) ; last 3 years,
   def last(x, n = 1, from = nil)
-    return (from or entries())[(-n) ..] if (x == :entry)
+    return (from or entries)[(-n) ..] if (x == :entry)
 
     t = from ? from[-1].to_t : Time.now
     k = t - n.send(x)
-    (from or entries()).filter {|e| e > k}
+    (from or entries).filter {|e| e > k}
   end
 end
 
