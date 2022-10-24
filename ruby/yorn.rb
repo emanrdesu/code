@@ -106,13 +106,11 @@ end
 
 class String
   def lstrip_by(chars)
-    f = -> c { chars.include? c }
-    self.chars.drop_while(&f).join
+    self.gsub(Regexp.new("^[#{chars}]+"), '')
   end
 
   def rstrip_by(chars)
-    f = -> c { chars.include? c }
-    self.chars.reverse.drop_while(&f).reverse.join
+    self.gsub(Regexp.new("[#{chars}]+$"), '')
   end
 
   def strip_by(chars)
@@ -154,9 +152,9 @@ class Yornal
 
   def edit
     t = Time.now
-    entryParent = [path, t.path(@type)].join('/').rstrip_by('/')
+    entryParent = [path, t.path(@type)].join('/').chomp('/')
     mkdir(entryParent) unless @type == :box
-    entry = [entryParent, t.send(@type).to_s].join('/').rstrip_by('/')
+    entry = [entryParent, t.send(@type).to_s].join('/').chomp('/')
     system "#{editor} #{entry}"
     # git shit here
   end
