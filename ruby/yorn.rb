@@ -20,6 +20,8 @@ DEPTH = {
   min:   5
 }
 
+SHA256 = OpenSSL::Digest.new("SHA256")
+
 ### utility Functions
 
 alias m method
@@ -124,22 +126,38 @@ end
 
 ### git functions
 
+def git(*command) # appended
+  system command.insert(0, "git").join(' ')
+end
+
 ### main classes
 
 class Yornal
   attr_reader :name, :type
 
+  ## class methods
+
   def Yornal.create(name, type)
-    (name =~ /[_A-za-z]/) or exitError("name must contain a letter or underscore")
+    (name =~ /[\-_A-za-z]/) or exitError("name must contain letter or underscore/hyphen")
 
     if type == :box
       File.open($yornalPath + '/' + name, "w") {}
+      git(:add , $yornalPath + '/' + name)
+      git(:commit, "-m 'create box yornal #{name}'")
     else
       mkdir [$yornalPath, name, Time.now.path(type)].join('/')
     end
 
     STDERR.puts "created yornal '#{name}'"
   end
+
+  def Yornal.list()
+    tree($yornalPath)
+      .map { |x| x.rstrip_by "/0-9" }.uniq
+      .map { |x| x[$yornalPath.size + 1 ..] }
+  end
+
+  ## instance methods
 
   def initialize(name)
     @name = name
@@ -155,8 +173,17 @@ class Yornal
     entryParent = [path, t.path(@type)].join('/').chomp('/')
     mkdir(entryParent) unless @type == :box
     entry = [entryParent, t.send(@type).to_s].join('/').chomp('/')
+    digest = (File.exists? entry) && SHA256.digest(File.read entry)
     system "#{editor} #{entry}"
-    # git shit here
+
+    # git stuff
+    if File.exists?(entry)
+      unless digest == SHA256.digest(File.read entry)
+        git(:add, entry)
+        sentry = entry[$yornalPath.size + 1 + @name.size ..].lstrip_by('/')
+        git(:commit, "-m '#{digest ? "modify" : "create"} #{@name} entry \"#{sentry}\"'")
+      end
+    end
   end
 
   def entries()
@@ -226,9 +253,6 @@ end
 
 ### main
 
-opts = Optimist::options do
-end
-
 data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
 path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
 $yornalPath = File.expand_path path
@@ -239,4 +263,11 @@ if File.exist? $yornalPath
   end
 else
   mkdir $yornalPath
+  git(:init)
+end
+
+olddir = Dir.pwd
+Dir.chdir $yornalPath
+
+opts = Optimist::options do
 end
