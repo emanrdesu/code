@@ -215,7 +215,7 @@ class Yornal
           (not entryHash[k]) or (v == '*') or
             v.split(',').map do |x|
             l, r = x.split('-')
-            (l .. (r or l))
+            (l .. (r or l)) #ranges work even if integers are in string form
           end.any? {|range| range.include? entryHash[k]}
         end.all? true
       end
@@ -263,7 +263,7 @@ class Entry
   end
 
   def path
-    [@yornal.path, @date].jomp('/')
+    [$yornalPath, name].jomp('/')
   end
 
   def name
