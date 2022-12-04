@@ -3,6 +3,7 @@
 ### yorn is a program for managing journals (yornals)
 ### uses git for version control
 ### TODO: add documentation
+### TODO: implement querying yornal names
 ### FUTURE: second version will implement encryption
 
 require 'optimist'
@@ -146,9 +147,9 @@ class Yornal
     Yornal.list.find { |x| x == name } and exitError("#{name} yornal already exists")
 
     if type == :box
-      File.open($yornalPath + '/' + name, "w") {}
+      system "touch #{$yornalPath}/#{name}"
       git(:add , $yornalPath + '/' + name)
-      git(:commit, "-m 'create box yornal #{name}'")
+      git(:commit, "-m \"create box yornal '#{name}'\"")
     else
       mkdir [$yornalPath, name, Time.now.path(type)].join('/')
       Yornal.new(name).edit("touch")
