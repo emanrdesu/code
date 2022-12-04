@@ -264,7 +264,7 @@ class Entry
   end
 
   def name
-    [@yornal.name, @date].join('/')
+    [@yornal.name, @date].join('/').chomp('/')
   end
 
   def to_t
