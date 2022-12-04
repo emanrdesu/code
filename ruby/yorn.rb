@@ -206,20 +206,20 @@ class Yornal
   # e.g. pattern: */*/8, 2022/09/* ; depends on yornal type (depth)
   def query(pattern)
     dateStructure = [:year, :month, :day, :hour, :min]
-    f = -> s { s.zip(dateStructure).to_h.flip }
+    timehash = -> x { x.zip(dateStructure).to_h.flip }
 
-    tree(path()).filter do |e|
-      qux = e[$yornalPath.size + @name.size + 1 ..]
-      unless qux.split('/').join =~ /\D/ # remove nested yornals
-        foo = f.(qux.stlip('/'))
-        bar = f.(pattern.downcase.stlip('/'))
+    tree(path()).filter do |path|
+      entry = path[$yornalPath.size + @name.size + 1 ..]
+      unless entry.split('/').join =~ /\D/ # remove nested yornals
+        entryHash = timehash.(entry.stlip('/'))
+        patternHash = timehash.(pattern.downcase.stlip('/'))
 
-        bar.map do |k,v|
-          (not foo[k]) or (v == '*') or
+        patternHash.map do |k, v|
+          (not entryHash[k]) or (v == '*') or
             v.split(',').map do |x|
             l, r = x.split('-')
             (l .. (r or l))
-          end.any? {|r| r.include? foo[k]}
+          end.any? {|range| range.include? entryHash[k]}
         end.all? true
       end
     end
@@ -250,7 +250,7 @@ class Entry
   attr_reader :pdate, :yornal # pseudo date, yornal (obj or name)
 
   def <=>(x)
-    (to_t() <=> ((x.is_a? Entry) ? x.to_t : x))
+    to_t() <=> ((x.is_a? Entry) ? x.to_t : x)
   end
 
   def Entry.fromPath(path)
