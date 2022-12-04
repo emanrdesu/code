@@ -264,7 +264,7 @@ class Entry
   end
 
   def name
-    path[$yornalPath.size + 1 ..]
+    [@yornal.name, @date].join('/')
   end
 
   def to_t
