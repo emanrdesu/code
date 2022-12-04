@@ -215,13 +215,13 @@ class Yornal
   # e.g. pattern: */*/8, 2022/09/* ; depends on yornal type (depth)
   def query(pattern)
     dateStructure = [:year, :month, :day, :hour, :min]
-    timehash = -> x { x.zip(dateStructure).to_h.flip }
+    datehash = -> x { x.zip(dateStructure).to_h.flip }
 
     tree(path()).filter do |path|
       entry = path[$yornalPath.size + @name.size + 1 ..]
       unless entry.split('/').join =~ /\D/ # remove nested yornals
-        entryHash = timehash.(entry.stlip('/'))
-        patternHash = timehash.(pattern.downcase.stlip('/'))
+        entryHash = datehash.(entry.stlip('/'))
+        patternHash = datehash.(pattern.downcase.stlip('/'))
 
         patternHash.map do |k, v|
           (not entryHash[k]) or (v == '*') or
@@ -286,6 +286,14 @@ class Entry
     Time.new(*@date.split('/'))
   end
 
+  def contains?(word)
+    File.read(path).downcase =~ Regexp.new(word.downcase)
+  end
+
+  def matches?(regex)
+    File.read(path) =~ Regexp.new(regex)
+  end
+
   def edit(editor=editor(), action=:modify)
     digest = SHA256.digest(File.read(path()))
     system "#{editor} #{path}"
@@ -299,6 +307,16 @@ class Entry
     pre = "You are about to delete yornal entry '#{name}'."
     question = "Are you sure you want to delete it?"
     git(:rm, "#{name}") if (!ask || yes_or_no?(question, pre))
+  end
+
+  def print(delimiter="\n\n")
+    $stdout.print File.read(path)
+    $stdout.print delimiter
+  end
+
+  def print_path(delimiter="\n")
+    $stdout.print path
+    $stdout.print delimiter
   end
 end
 
