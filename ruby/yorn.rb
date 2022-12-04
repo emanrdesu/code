@@ -247,19 +247,20 @@ class Entry
     (to_t() <=> ((x.is_a? Entry) ? x.to_t : x))
   end
 
-  # TODO: FIX
-  def Entry.fromPath(p)
-    yornal, *pdate = p[$yornalPath.size ..].stlip('/')
-    Entry.new(pdate.join('/'), yornal)
+  def Entry.fromPath(path)
+    path[$yornalPath.size ..].stlip('/')
+      .partition { |x| x =~ /^\d+$/ }
+      .map { |a| a.join('/') }
+      .then { |date, yornal| Entry.new date, yornal }
   end
 
   def initialize(date, yornal)
+    @date = (date.is_a? Time) ? date.to_a[..5].drop_while{|i| i == 0}.reverse.join('/') : date
     @yornal = (yornal.is_a? Yornal) ? yornal : Yornal.new(yornal)
-    @pdate = (date.is_a? Time) ? date.to_a[..5].drop_while{|i| i == 0}.reverse.join('/') : date
   end
 
   def path
-    (@yornal.path() + "/" + @pdate).chomp('/')
+    (@yornal.path() + "/" + @date).chomp('/')
   end
 
   def name
@@ -267,7 +268,7 @@ class Entry
   end
 
   def to_t
-    Time.new(*@pdate.split('/'))
+    Time.new(*@date.split('/'))
   end
 
   def edit
@@ -275,7 +276,7 @@ class Entry
     system "#{editor} #{path}"
     unless digest == SHA256.digest(File.read(path()))
       git(:add, path())
-      git(:commit, "-m 'modify #{@yornal.name} entry #{@pdate}'")
+      git(:commit, "-m 'modify #{@yornal.name} entry #{@date}'")
     end
   end
 
