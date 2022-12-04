@@ -219,6 +219,15 @@ class Yornal
     end
   end
 
+  # first(:month, n = 2) ; first 2 months
+  def first(x, n = 1, from = nil)
+    return (from or entries)[.. (n-1)] if (x == :entry)
+
+    t = (from ? from[0] : entries[0]).to_t
+    k = t + n.send(x)
+    (from or entries).filter {|e| e < k}
+  end
+
   # last(:year, n = 3) ; last 3 years,
   def last(x, n = 1, from = nil)
     return (from or entries)[(-n) ..] if (x == :entry)
@@ -238,6 +247,7 @@ class Entry
     (to_t() <=> ((x.is_a? Entry) ? x.to_t : x))
   end
 
+  # TODO: FIX
   def Entry.fromPath(p)
     yornal, *pdate = p[$yornalPath.size ..].stlip('/')
     Entry.new(pdate.join('/'), yornal)
