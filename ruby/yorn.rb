@@ -116,6 +116,12 @@ class String
   end
 end
 
+class Array
+  def jomp(x)
+    self.join(x).chomp(x)
+  end
+end
+
 ### git functions
 
 def git(*command) # appended
@@ -177,9 +183,9 @@ class Yornal
   end
 
   def edit(editor = editor(), time=Time.now)
-    entryParent = [path, time.path(@type)].join('/').chomp('/')
+    entryParent = [path, time.path(@type)].jomp('/')
     mkdir(entryParent) unless @type == :box
-    entry = [entryParent, time.send(@type).to_s].join('/').chomp('/')
+    entry = [entryParent, time.send(@type).to_s].jomp('/')
     digest = (File.exists? entry) && SHA256.digest(File.read entry)
     system "#{editor} #{entry}"
 
@@ -260,11 +266,11 @@ class Entry
   end
 
   def path
-    (@yornal.path() + "/" + @date).chomp('/')
+    [@yornal.path, @date].jomp('/')
   end
 
   def name
-    [@yornal.name, @date].join('/').chomp('/')
+    [@yornal.name, @date].jomp('/')
   end
 
   def to_t
