@@ -4,7 +4,7 @@
 ### uses git for version control
 ### TODO: add documentation
 ### TODO: implement querying yornal names
-### FUTURE: second version will implement encryption
+### FUTURE: support encryption
 
 require 'optimist'
 require 'openssl'
@@ -40,6 +40,8 @@ def yes_or_no?(q, pre=nil, post=nil)
   end
 end
 
+
+
 def yornal_depth (dir)
   return 0 if not File.directory? dir
   Dir.children(dir)
@@ -64,7 +66,7 @@ def mkdir(path)
 end
 
 def exitError(message, *args)
-  STDERR.printf "error: " + message + ".\n", *args ; throw nil # exit 1
+  STDERR.printf "error: " + message + "\n", *args ; throw nil # exit 1
 end
 
 
@@ -137,22 +139,28 @@ class Yornal
   ## class methods
 
   def Yornal.create(name, type)
-    (name =~ /[\/\.\-_A-za-z]/) or exitError("name must contain [a-z] or [/_-.]")
-    (name =~ /[^\/\._A-za-z0-9\-]/) and exitError("name can only have [a-z], [0-9] or [/_-.]")
-    (name =~ /\/\//) and exitError("name cannot contain consecutive /")
-    (name =~ /^\//) and exitError("name cannot begin with /")
-    (name =~ /\/$/) and exitError("name cannot end with /")
-    (name =~ /\.git/) and exitError("name cannot contain '.git'")
-    (name =~ /^\.+$/) and exitError("name cannot be dots only")
-    Yornal.list.find { |x| x == name } and exitError("#{name} yornal already exists")
+    {  /^\./   =>  "begin with a dot",
+       /^\//   =>  "begin with /",
+       /\/$/   =>  "end with /",
+      /[\^]/   =>  "contain ^",
+      /\/\//   =>  "contain consecutive /",
+      /\.git/  =>  "contain '.git'",
+      /^git$/  =>  "be 'git'",
+      /^\d+$/  =>  "be digits only",
+      /[^\/\._A-za-z0-9\-]/ =>  "have chars not in [a-z], [0-9] or [/_-.]"
+    }.each do |regex, errorMessage|
+      name =~ regex and exitError("name cannot " + errorMessage)
+    end
+
+    Yornal.list.find { |x| x == name } and exitError("yornal '#{name}' already exists")
 
     if type == :box
-      system "touch #{$yornalPath}/#{name}"
+      File.open($yornalPath + '/' + name, "w") {}
       git(:add , $yornalPath + '/' + name)
       git(:commit, "-m \"create box yornal '#{name}'\"")
     else
-      mkdir [$yornalPath, name, Time.now.path(type)].join('/')
-      Yornal.new(name).edit("touch")
+      mkdir [$yornalPath, name, Time.now.path(type)].jomp('/')
+      Yornal.new(name).edit("echo > ")
     end
   end
 
