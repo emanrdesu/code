@@ -153,7 +153,9 @@ class Yornal
     Yornal.list.find { |x| x == name } or exitError("'#{name}' yornal doesn't exist")
     pre = "You are about to delete yornal '#{name}'."
     question = "Are you sure you want to delete it?"
-    git(:rm, "-rf #{name}") if (!ask || yes_or_no?(question, pre))
+    if (!ask || yes_or_no?(question, pre))
+      Yornal.new(name).entries.each { |e| e.delete(ask=false) }
+    end
   end
 
   def Yornal.list()
@@ -174,11 +176,10 @@ class Yornal
     $yornalPath + "/" + @name
   end
 
-  def edit(editor = editor())
-    t = Time.now
-    entryParent = [path, t.path(@type)].join('/').chomp('/')
+  def edit(editor = editor(), time=Time.now)
+    entryParent = [path, time.path(@type)].join('/').chomp('/')
     mkdir(entryParent) unless @type == :box
-    entry = [entryParent, t.send(@type).to_s].join('/').chomp('/')
+    entry = [entryParent, time.send(@type).to_s].join('/').chomp('/')
     digest = (File.exists? entry) && SHA256.digest(File.read entry)
     system "#{editor} #{entry}"
 
@@ -193,11 +194,11 @@ class Yornal
   end
 
   def entries()
-    self.filter('*').map { |p| Entry.fromPath p }
+    self.query('*').map { |p| Entry.fromPath p }
   end
 
   # e.g. pattern: */*/8, 2022/09/* ; depends on yornal type (depth)
-  def filter(pattern)
+  def query(pattern)
     dateStructure = [:year, :month, :day, :hour, :min]
     f = -> s { s.zip(dateStructure).to_h.flip }
 
@@ -271,7 +272,7 @@ class Entry
   def delete(ask=true)
     pre = "You are about to delete yornal entry '#{name}'."
     question = "Are you sure you want to delete it?"
-    git(:rm, "-rf #{name}") if (!ask || yes_or_no?(question, pre))
+    git(:rm, "#{name}") if (!ask || yes_or_no?(question, pre))
   end
 end
 
