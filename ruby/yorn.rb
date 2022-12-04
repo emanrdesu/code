@@ -40,17 +40,15 @@ def yes_or_no?(q, pre=nil, post=nil)
   end
 end
 
-
-
 def yornal_depth (dir)
   return 0 if not File.directory? dir
   Dir.children(dir)
-    .filter {|i| not (i =~ /\D/)} # remove nested yornals
+    .delete_if {|i| i =~ /\D/} # remove nested yornals
     .map {|i| 1 + yornal_depth([dir, i].join('/'))}.max or 1
 end
 
 def tree (dir)
-  return [dir] if not (File.directory? dir)
+  return [dir] if !(File.directory? dir) || dir =~ /\.git/
   Dir.children(dir).map {|f| tree [dir,f].join('/')}.flatten
 end
 
@@ -68,7 +66,6 @@ end
 def exitError(message, *args)
   STDERR.printf "error: " + message + "\n", *args ; throw nil # exit 1
 end
-
 
 ### stdlib class additions
 
@@ -116,6 +113,10 @@ class String
 
   def stlip(c)
     self.strip_by(c).split(c)
+  end
+
+  def number?
+    self =~ /^\d+$/
   end
 end
 
@@ -175,9 +176,11 @@ class Yornal
 
   def Yornal.list()
     tree($yornalPath)
-      .filter { |x| !(x =~ /\.git/)}
-      .map { |x| x.rstrip_by "/0-9" }.uniq
-      .map { |x| x[$yornalPath.size + 1 ..] }
+      .delete_if { |v| v =~ /\.git/ }
+      .map { |w| w[$yornalPath.size + 1 ..] }
+      .map { |x| x.split('/') }
+      .map { |y| y.take_while { |q| !q.number? } }
+      .map { |z| z.jomp('/') }.uniq
   end
 
   ## instance methods
@@ -224,7 +227,7 @@ class Yornal
           (not entryHash[k]) or (v == '*') or
             v.split(',').map do |x|
             l, r = x.split('-')
-            (l .. (r or l)) #ranges work even if integers are in string form
+            (l .. (r or l)) #ranges work for integer strings
           end.any? {|range| range.include? entryHash[k]}
         end.all? true
       end
