@@ -10,7 +10,6 @@ require 'openssl'
 
 ### globals
 
-# static
 DEPTH = {
   box:   0,
   year:  1,
@@ -25,10 +24,6 @@ SHA256 = OpenSSL::Digest.new("SHA256")
 ### utility Functions
 
 alias m method
-
-def alnum?(x)
-  x =~ /\A\p{Alnum}+\z/
-end
 
 def yes_or_no?(q, pre=nil, post=nil)
   puts pre if pre
@@ -52,11 +47,8 @@ def yornal_depth (dir)
 end
 
 def tree (dir)
-  if (File.directory? dir)
-    Dir.children(dir).map {|f| tree [dir,f].join('/')}.flatten
-  else
-    [dir]
-  end
+  return [dir] if not (File.directory? dir)
+  Dir.children(dir).map {|f| tree [dir,f].join('/')}.flatten
 end
 
 def editor
@@ -71,7 +63,7 @@ def mkdir(path)
 end
 
 def exitError(message, *args)
-  STDERR.printf "error: " + message + ".\n", *args ; exit 1
+  STDERR.printf "error: " + message + ".\n", *args ; throw nil # exit 1
 end
 
 
@@ -138,7 +130,14 @@ class Yornal
   ## class methods
 
   def Yornal.create(name, type)
-    (name =~ /[\-_A-za-z]/) or exitError("name must contain letter or underscore/hyphen")
+    (name =~ /[\/\.\-_A-za-z]/) or exitError("name must contain [a-z] or [/_-.]")
+    (name =~ /[^\/\._A-za-z0-9\-]/) and exitError("name can only have [a-z], [0-9] or [/_-.]")
+    (name =~ /\/\//) and exitError("name cannot contain consecutive /")
+    (name =~ /^\//) and exitError("name cannot begin with /")
+    (name =~ /\/$/) and exitError("name cannot end with /")
+    (name =~ /\.git/) and exitError("name cannot contain '.git'")
+    (name =~ /^\.+$/) and exitError("name cannot be dots only")
+    Yornal.list.find { |x| x == name } and exitError("#{name} yornal already exists")
 
     if type == :box
       File.open($yornalPath + '/' + name, "w") {}
@@ -146,13 +145,20 @@ class Yornal
       git(:commit, "-m 'create box yornal #{name}'")
     else
       mkdir [$yornalPath, name, Time.now.path(type)].join('/')
+      Yornal.new(name).edit("touch")
     end
+  end
 
-    STDERR.puts "created yornal '#{name}'"
+  def Yornal.delete(name, ask=true)
+    Yornal.list.find { |x| x == name } or exitError("'#{name}' yornal doesn't exist")
+    pre = "You are about to delete yornal '#{name}'."
+    question = "Are you sure you want to delete it?"
+    git(:rm, "-rf #{name}") if (!ask || yes_or_no?(question, pre))
   end
 
   def Yornal.list()
     tree($yornalPath)
+      .filter { |x| !(x =~ /\.git/)}
       .map { |x| x.rstrip_by "/0-9" }.uniq
       .map { |x| x[$yornalPath.size + 1 ..] }
   end
@@ -168,7 +174,7 @@ class Yornal
     $yornalPath + "/" + @name
   end
 
-  def edit
+  def edit(editor = editor())
     t = Time.now
     entryParent = [path, t.path(@type)].join('/').chomp('/')
     mkdir(entryParent) unless @type == :box
@@ -180,8 +186,8 @@ class Yornal
     if File.exists?(entry)
       unless digest == SHA256.digest(File.read entry)
         git(:add, entry)
-        sentry = entry[$yornalPath.size + 1 + @name.size ..].lstrip_by('/')
-        git(:commit, "-m '#{digest ? "modify" : "create"} #{@name} entry \"#{sentry}\"'")
+        sentry = entry[$yornalPath.size + 1 + @name.size ..].lstrip_by('/') # short entry
+        git(:commit, "-m '#{digest ? "modify" : "create"} #{@name} entry #{sentry}'")
       end
     end
   end
@@ -242,11 +248,30 @@ class Entry
   end
 
   def path
-    @yornal.path() + "/" + @pdate
+    (@yornal.path() + "/" + @pdate).chomp('/')
+  end
+
+  def name
+    path[$yornalPath.size + 1 ..]
   end
 
   def to_t
     Time.new(*@pdate.split('/'))
+  end
+
+  def edit
+    digest = SHA256.digest(File.read(path()))
+    system "#{editor} #{path}"
+    unless digest == SHA256.digest(File.read(path()))
+      git(:add, path())
+      git(:commit, "-m 'modify #{@yornal.name} entry #{@pdate}'")
+    end
+  end
+
+  def delete(ask=true)
+    pre = "You are about to delete yornal entry '#{name}'."
+    question = "Are you sure you want to delete it?"
+    git(:rm, "-rf #{name}") if (!ask || yes_or_no?(question, pre))
   end
 end
 
@@ -263,10 +288,10 @@ if File.exist? $yornalPath
   end
 else
   mkdir $yornalPath
+  Dir.chdir $yornalPath
   git(:init)
 end
 
-olddir = Dir.pwd
 Dir.chdir $yornalPath
 
 opts = Optimist::options do
