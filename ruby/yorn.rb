@@ -186,16 +186,13 @@ class Yornal
     entryParent = [path, time.path(@type)].jomp('/')
     mkdir(entryParent) unless @type == :box
     entry = [entryParent, time.send(@type).to_s].jomp('/')
-    digest = (File.exists? entry) && SHA256.digest(File.read entry)
-    system "#{editor} #{entry}"
 
-    # git stuff
-    if File.exists?(entry)
-      unless digest == SHA256.digest(File.read entry)
-        git(:add, entry)
-        sentry = entry[$yornalPath.size + 1 + @name.size ..].lstrip_by('/') # short entry
-        git(:commit, "-m '#{digest ? "modify" : "create"} #{@name} entry #{sentry}'")
-      end
+    if File.exists? entry
+      Entry.fromPath(entry).edit(editor)
+    else
+      system "touch #{entry}"
+      Entry.fromPath(entry).edit(editor, action=:create)
+      File.delete entry if File.size(entry) == 0
     end
   end
 
@@ -277,12 +274,12 @@ class Entry
     Time.new(*@date.split('/'))
   end
 
-  def edit
+  def edit(editor=editor(), action=:modify)
     digest = SHA256.digest(File.read(path()))
     system "#{editor} #{path}"
     unless digest == SHA256.digest(File.read(path()))
       git(:add, path())
-      git(:commit, "-m 'modify #{@yornal.name} entry #{@date}'")
+      git(:commit, "-m '#{action} #{@yornal.name} entry #{@date}'")
     end
   end
 
