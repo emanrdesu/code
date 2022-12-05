@@ -40,6 +40,30 @@ def yes_or_no?(q, pre=nil, post=nil)
   end
 end
 
+
+def monthswap(string)
+  string = string.downcase
+
+  [ "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december"
+  ] .map { |m| [m[0..2], m].map {|x| Regexp.new(x)} }
+    .zip(1..) do |names, i|
+       names.each { |n| string.gsub!(n, i.to_s) }
+  end
+
+  string
+end
+
 def yornal_depth (dir)
   return 0 if not File.directory? dir
   Dir.children(dir)
@@ -64,7 +88,7 @@ def mkdir(path)
 end
 
 def exitError(message, *args)
-  STDERR.printf "error: " + message + "\n", *args ; exit 1
+  STDERR.printf "Error: " + message + "\n", *args ; exit 1
 end
 
 ### stdlib class additions
@@ -321,25 +345,6 @@ class Entry
 end
 
 
-### main
-
-data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
-path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
-$yornalPath = File.expand_path path
-
-if File.exist? $yornalPath
-  if not File.directory? $yornalPath
-    exitError("'%s' for yornal storage is not a directory", $yornalPath)
-  end
-else
-  mkdir $yornalPath
-  Dir.chdir $yornalPath
-  git(:init)
-end
-
-Dir.chdir $yornalPath
-
-
 ## documentation and command line parsing
 
 class Format
@@ -361,9 +366,9 @@ $options = {
     default: "1",
 
     syntax: [
-      "[$n | k[±k]*]",
+      "[$n | timeSpan[±timeSpan]*]",
       "  where $j, $n ∈ NaturalNumber",
-      "  and k ::= [$j.]dateAttr",
+      "  and timeSpan ::= [$j.]dateAttr",
       "  and dateAttr ::= y[ear] | mon[th] | w[eek]",
       "                |  d[ay]  | h[our]  | min[ute]"
     ],
@@ -538,4 +543,21 @@ opts = Optimist::options do
   conflicts :print, :pp
 end
 
-puts opts
+
+### main
+
+data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
+path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
+$yornalPath = File.expand_path path
+
+if File.exist? $yornalPath
+  if not File.directory? $yornalPath
+    exitError("'%s' for yornal storage is not a directory", $yornalPath)
+  end
+else
+  mkdir $yornalPath
+  Dir.chdir $yornalPath
+  git(:init)
+end
+
+Dir.chdir $yornalPath
