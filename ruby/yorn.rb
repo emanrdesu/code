@@ -212,7 +212,7 @@ class Yornal
     self.query('*').map { |p| Entry.fromPath p }
   end
 
-  # e.g. pattern: */*/8, 2022/09/* ; depends on yornal type (depth)
+  # e.g. pattern: @/@/8, 2022/09/@ ; depends on yornal type (depth)
   def query(pattern)
     dateStructure = [:year, :month, :day, :hour, :min]
     datehash = -> x { x.zip(dateStructure).to_h.flip }
@@ -224,7 +224,7 @@ class Yornal
         patternHash = datehash.(pattern.downcase.stlip('/'))
 
         patternHash.map do |k, v|
-          (not entryHash[k]) or (v == '*') or
+          (not entryHash[k]) or (v == '@') or
             v.split(',').map do |x|
             l, r = x.split('-')
             (l .. (r or l)) #ranges work for integer strings
