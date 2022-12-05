@@ -64,7 +64,7 @@ def mkdir(path)
 end
 
 def exitError(message, *args)
-  STDERR.printf "error: " + message + "\n", *args ; throw nil # exit 1
+  STDERR.printf "error: " + message + "\n", *args ; exit 1
 end
 
 ### stdlib class additions
@@ -339,5 +339,203 @@ end
 
 Dir.chdir $yornalPath
 
-opts = Optimist::options do
+
+## documentation and command line parsing
+
+class Format
+  def self.examples(examples)
+    return [] if examples.size == 0
+    examples
+      .map { |e| (' ' *  2) + e }
+      .unshift("examples:")
+      .join("\n")
+  end
+
+  def self.syntax(syntax)
+    [syntax].flatten.join("\n")
+  end
 end
+
+$options = {
+  last: {
+    default: "1",
+
+    syntax: [
+      "[$n | k[±k]*]",
+      "  where $j, $n ∈ NaturalNumber",
+      "  and k ::= [$j.]dateAttr",
+      "  and dateAttr ::= y[ear] | mon[th] | w[eek]",
+      "                |  d[ay]  | h[our]  | min[ute]"
+    ],
+
+    examples: [
+      "# selects the last entry in foo",
+      "yorn foo --last",
+      "# all the entries in foo in the past 3 years",
+      "yorn foo --last 3.year",
+      "# last 4 entries in bar yornal",
+      "yorn bar --last 4",
+      "# all the entries in qux in the past 2 month + 3 days",
+      "yorn qux --last 3.day+2.mon",
+      "# default action for multiple entries is to print entry paths",
+      "# see -h for recommended usage"
+    ]
+  },
+
+  first: {
+    default: "1",
+
+    syntax: [
+      "[$n | timeSpan[±timeSpan]*]",
+      "  where $j, $n ∈ NaturalNumber",
+      "  and timeSpan ::= [$j.]dateAttr",
+      "  and dateAttr ::= y[ear] | mon[th] | w[eek] ",
+      "                |   d[ay] | h[our]  | min[ute]"
+    ],
+
+    examples: [
+      "# first 5 entries in baz",
+      "yorn baz --first 5",
+      "# select entries in the period between the first",
+      "# entry in pom and 2 months after the entry",
+      "# very similiar to --last",
+      "yorn pom --first 2.mon"
+    ]
+  },
+
+  query: {
+    syntax: [ "$year[/$month[/$day[/$hour[/$minute]]]]",
+              "  where $year,$month,$day,$hour and $minute",
+              "  ::= int[,(int | int-int)]* | \"@\"",
+              "  $month can be any month name as well" ],
+    examples: [
+      "# select all entries in the 'ter' yornal (default/automatic)",
+      "yorn ter --query @",
+      "# select all entries in any year where the month is august",
+      "yorn hue --query @/aug",
+      "# selects all entries even though day was specified",
+      "# because querying only cares about yornal set fields",
+      "# i.e. only the two @'s are looked at in this case",
+      "yorn monthlyJournal --query @/@/1"
+    ]
+  },
+
+  edit: {
+    syntax: [
+      "loc[±$n | ±$k[±$i.dateAttr]*]",
+      "  where $n, $k, $i ∈ NaturalNumber",
+      "    and loc ::= t[ail] | h[ead] | m[id[dle]]",
+      "    and dateAttr ::= y[ear] | mon[th]",
+      "                  | d[ay] | h[our] | min[ute]"
+    ],
+
+    examples: [
+      "# get entries from last year, edit the third from last entry",
+      "yorn yup -l y -e t-2",
+      "# does nothing, as there is nothing after tail, same for head-1",
+      "yorn jan -e tail+1",
+      "# get all entries in hex yornal",
+      "# edit entry 1.5 months before the fourth entry",
+      "# entry won't exist, so will be created, and will be new first entry",
+      "yorn hex -e head+3-2.month+15.day"
+    ]
+  },
+
+  add: {
+    syntax: [
+      "$year[/$month[/$day[/$hour[/$minute]]]]",
+      "  where all ∈ NaturalNumber",
+      "  and $month =~ month name"
+    ],
+
+    examples: [
+      "# adds 2022 entry to yearYornal, ignores fields not applicable",
+      "yorn yearYornal -a 2022/aug/20"
+    ]
+  },
+
+  match: {
+    syntax: "word",
+    examples: [
+      "# select entries in last 12 years",
+      "# that have the word \"money\" in it  }",
+      "yorn foo -l 12.y -m money"
+    ]
+  },
+
+  regex: {
+    syntax: "$rubyRegex",
+    examples: [
+      "# select entries that have integers",
+      "yorn foo -q @ -r \"^\\d+$\""
+    ]
+  },
+
+  create: {
+    syntax: "$yornalName",
+    examples: [
+      "# create day yornal named foo",
+      "yorn -c foo",
+      "# create box yornal named foo/bar",
+      "yorn -c foo/bar -t box",
+      "# create minute yornal named qux",
+      "yorn -c qux -t min"
+    ]
+  },
+
+  type: {
+    default: "day",
+
+    syntax: [
+      "y[ear[ly]] | mon[th[ly]] | w[eek[ly]]",
+      "(d|day|daily) | h[our[ly]] | m[inute[ly]]",
+      "s[econd[ly]] | box"
+    ],
+
+    examples: []
+  },
+
+  print: {
+    syntax: "$delimiter=\"\\n\\n\"",
+    examples: [
+      "# select all entries and print them without a delimiter",
+      "yorn foo -q @ -p ''"
+    ]
+  },
+
+  pp: {
+    syntax: "$delimiter=\"\\n\" ; 'print path'",
+    examples: [
+      "# select last 3 entries and print paths",
+      "# --print-path not needed as its default action",
+      "yorn foo -l 3 --print-path"
+    ]
+  }
+}
+
+opts = Optimist::options do
+  def documentation(option)
+    $options[option][:syntax]
+      .then(&Format.m(:syntax))
+  end
+
+  $options.each do |option ,hash|
+    opt option, documentation(option), :type => :string, :default => hash[:default]
+  end
+
+  opt :delete, "Delete selected entries"
+  opt :usage, "Print example flag usage", :type => :string, :default => "yorn"
+  opt :verbose, "Print more information"
+
+  $options.each_key do |option|
+    [[:add], [:create, :type]]
+      .each { |set| conflicts set[0], option unless set[1..].any? option }
+    conflicts :edit, option unless [:edit, :last, :first, :query].any? option
+  end
+
+  conflicts :last, :first
+  conflicts :match, :regex
+  conflicts :print, :pp
+end
+
+puts opts
