@@ -41,28 +41,7 @@ def yes_or_no?(q, pre=nil, post=nil)
 end
 
 
-def monthswap(string)
-  string = string.downcase
 
-  [ "january",
-    "february",
-    "march",
-    "april",
-    "may",
-    "june",
-    "july",
-    "august",
-    "september",
-    "october",
-    "november",
-    "december"
-  ] .map { |m| [m[0..2], m].map {|x| Regexp.new(x)} }
-    .zip(1..) do |names, i|
-       names.each { |n| string.gsub!(n, i.to_s) }
-  end
-
-  string
-end
 
 def yornal_depth (dir)
   return 0 if not File.directory? dir
@@ -88,7 +67,7 @@ def mkdir(path)
 end
 
 def exitError(message, *args)
-  STDERR.printf "Error: " + message + "\n", *args ; exit 1
+  STDERR.printf "Error: " + message + "\n", *args ; throw nil # exit 1
 end
 
 ### stdlib class additions
@@ -101,6 +80,10 @@ class Integer
   def week() self * 7.day end
   def month() self * 4.week end
   def year() self * 12.month end
+
+  def to_ss()
+    (self < 0 ? '' : '+') + self.to_s
+  end
 end
 
 class Hash
@@ -233,7 +216,7 @@ class Yornal
   end
 
   def entries()
-    self.query('*').map { |p| Entry.fromPath p }
+    self.query('@').map { |p| Entry.fromPath p }.sort
   end
 
   # e.g. pattern: @/@/8, 2022/09/@ ; depends on yornal type (depth)
@@ -359,7 +342,94 @@ class Format
   def self.syntax(syntax)
     [syntax].flatten.join("\n")
   end
+
+  def self.monthswap(string)
+    string = string.downcase
+
+    [ "january",
+      "february",
+      "march",
+      "april",
+      "may",
+      "june",
+      "july",
+      "august",
+      "september",
+      "october",
+      "november",
+      "december"
+    ] .map { |m| [m[0..2], m].map {|x| Regexp.new(x)} }
+      .zip(1..) do |names, i|
+      names.each { |n| string.gsub!(n, i.to_s) }
+    end
+
+    string
+  end
 end
+
+
+class Parse
+
+  def self.editFlag(argument, entries) # => Time
+    head = -> n=0 { entries[n] }
+    tail = -> n=0 { entries[entries.size - 1 + n] }
+    middle = -> n=0 { entries[(entries.size / 2) + n] }
+
+    location, *operands = argument.split(/[\+\-]/)
+    ops = argument.scan(/[\+\-]/)
+
+    { ["t", "tail"] => tail,
+      ["h", "head"] => head,
+      ["m", "mid", "middle"] => middle
+    } .find { |k,v| k.any? location }
+      .tap {|_| _ or exitError "undefined location '#{location}'" }
+      .then do |_, locator|
+      return locator[].to_t if operands.size == 0
+
+      arg = 0
+      if operands[0].number?
+        arg = (ops.shift + operands.shift).to_i
+      end
+
+      op = ops.shift
+      anchor = locator[arg]
+      anchor or exitError("entry $#{location}#{arg.to_ss} does not exist")
+
+      operands.map {|x| self.timeLiteral x}
+        .zip(ops + ['']).flatten.join
+        .then { |time| anchor.to_t + (op == '+' ? 1 : -1) * (eval(time) || 0) }
+    end
+  end
+
+  def self.lastFirstFlag(argument) # [Symbol, Integer]
+    return [:entry, argument.to_i] if argument.number?
+    operands = argument.split(/[\+\-]/)
+    ops = argument.scan(/[\+\-]/)
+
+    operands.map {|x| self.timeLiteral x}
+      .zip(ops + ['']).flatten.join
+      .then { |r| [:time, eval(r)] }
+  end
+
+  def self.timeLiteral(x) # Integer
+    x =~ /\d+\.[a-z]+/ or exitError("malformed time spec '#{x}'")
+    n, field = x.split('.')
+
+    [ [:second, "s", "sec", "second"],
+      [:minute, "min", "minute"],
+      [:hour, "h", "hour"],
+      [:day, "d", "day"],
+      [:week, "w", "week"],
+      [:month, "mon", "month"],
+      [:year, "y", "year"]
+    ].find do |m, *forms|
+      forms.any? field
+    end
+      .tap {|_| _ or exitError "undefined time field '#{field}'"}
+      .slice(0).then { |m| n.to_i.send(m) }
+  end
+end
+
 
 $options = {
   last: {
@@ -426,6 +496,7 @@ $options = {
   },
 
   edit: {
+    default: "tail",
     syntax: [
       "loc[±$n | ±$k[±$i.dateAttr]*]",
       "  where $n, $k, $i ∈ NaturalNumber",
@@ -437,7 +508,7 @@ $options = {
     examples: [
       "# get entries from last year, edit the third from last entry",
       "yorn yup -l y -e t-2",
-      "# does nothing, as there is nothing after tail, same for head-1",
+      "# error, as there is nothing after tail",
       "yorn jan -e tail+1",
       "# get all entries in hex yornal",
       "# edit entry 1.5 months before the fourth entry",
@@ -529,7 +600,7 @@ opts = Optimist::options do
   end
 
   opt :delete, "Delete selected entries"
-  opt :usage, "Print example flag usage", :type => :string, :default => "yorn"
+  opt :usage, "Print example flag usage", :type => :string
   opt :verbose, "Print more information"
 
   $options.each_key do |option|
@@ -561,3 +632,5 @@ else
 end
 
 Dir.chdir $yornalPath
+
+p opts
