@@ -241,22 +241,16 @@ class Yornal
     end
   end
 
-  # first(:month, n = 2) ; first 2 months
-  def first(x, n = 1, from = nil)
-    return (from or entries)[.. (n-1)] if (x == :entry)
-
-    t = (from ? from[0] : entries[0]).to_t
-    k = t + n.send(x)
-    (from or entries).filter {|e| e < k}
+  def first(x, n = 1, from = entries)
+    return from[.. (n-1)] if (x == :entry)
+    t = from[0].to_t
+    from.filter { |e| e < (t + n) }
   end
 
-  # last(:year, n = 3) ; last 3 years,
-  def last(x, n = 1, from = nil)
-    return (from or entries)[(-n) ..] if (x == :entry)
-
-    t = from ? from[-1].to_t : Time.now
-    k = t - n.send(x)
-    (from or entries).filter {|e| e > k}
+  def last(x, n = 1, from = entries)
+    return from[(-n) ..] if (x == :entry)
+    t = Time.now
+    from.filter { |e| e > (t - n) }
   end
 end
 
