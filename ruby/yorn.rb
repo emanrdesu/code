@@ -416,9 +416,7 @@ class Parse
       [:week, "w", "week"],
       [:month, "mon", "month"],
       [:year, "y", "year"]
-    ].find do |m, *forms|
-      forms.any? field
-    end
+    ] .find { |m, *forms| forms.any? field }
       .tap {|_| _ or exitError "undefined time field '#{field}'"}
       .slice(0).then { |m| n.to_i.send(m) }
   end
