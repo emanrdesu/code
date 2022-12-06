@@ -67,7 +67,7 @@ def mkdir(path)
 end
 
 def exitError(message, *args)
-  STDERR.printf "Error: " + message + "\n", *args ; throw nil # exit 1
+  STDERR.printf "Error: " + message + "\n", *args ; exit 1
 end
 
 ### stdlib class additions
@@ -181,13 +181,19 @@ class Yornal
     end
   end
 
-  def Yornal.list()
+  def Yornal.list
     tree($yornalPath)
       .delete_if { |v| v =~ /\.git/ }
       .map { |w| w[$yornalPath.size + 1 ..] }
       .map { |x| x.split('/') }
       .map { |y| y.take_while { |q| !q.number? } }
       .map { |z| z.jomp('/') }.uniq
+  end
+
+  def Yornal.report
+    Yornal.list
+      .map { |y| [y, Yornal.new(y).entries.size] }
+      .each { |y, c| printf "%-10s %d\n", y, c }
   end
 
   ## instance methods
@@ -325,7 +331,7 @@ end
 ## documentation and command line parsing
 
 class Format
-  def self.examples(examples)
+  def Format.examples(examples)
     return [] if examples.size == 0
     examples
       .map { |e| (' ' *  2) + e }
@@ -333,11 +339,11 @@ class Format
       .join("\n")
   end
 
-  def self.syntax(syntax)
+  def Format.syntax(syntax)
     [syntax].flatten.join("\n")
   end
 
-  def self.monthswap(string)
+  def Format.monthswap(string)
     string = string.downcase
 
     [ "january",
@@ -364,7 +370,7 @@ end
 
 class Parse
 
-  def self.editFlag(argument, entries) # => Time
+  def Parse.editFlag(argument, entries) # => Time
     head = -> n=0 { entries[n] }
     tail = -> n=0 { entries[entries.size - 1 + n] }
     middle = -> n=0 { entries[(entries.size / 2) + n] }
@@ -395,7 +401,7 @@ class Parse
     end
   end
 
-  def self.lastFirstFlag(argument) # [Symbol, Integer]
+  def Parse.lastFirstFlag(argument) # [Symbol, Integer]
     return [:entry, argument.to_i] if argument.number?
     operands = argument.split(/[\+\-]/)
     ops = argument.scan(/[\+\-]/)
@@ -405,7 +411,7 @@ class Parse
       .then { |r| [:time, eval(r)] }
   end
 
-  def self.timeLiteral(x) # Integer
+  def Parse.timeLiteral(x) # Integer
     x =~ /\d+\.[a-z]+/ or exitError("malformed time spec '#{x}'")
     n, field = x.split('.')
 
@@ -625,4 +631,7 @@ end
 
 Dir.chdir $yornalPath
 
-p opts
+
+
+$yornal = ARGV[0]
+Yornal.report unless opts.keys.any?(/given/) || $yornal
