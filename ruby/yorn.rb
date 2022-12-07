@@ -371,7 +371,6 @@ end
 
 
 class Parse
-
   def Parse.editFlag(argument, entries) # => Time
     head = -> n=0 { entries[n] }
     tail = -> n=0 { entries[entries.size - 1 + n] }
@@ -427,6 +426,26 @@ class Parse
     ] .find { |m, *forms| forms.any? field }
       .tap {|_| _ or exitError "undefined time field '#{field}'"}
       .slice(0).then { |m| n.to_i.send(m) }
+  end
+end
+
+
+class Validate
+  def Validate.queryFlag(query)
+    query =~ /\/\// and exitError 'consecutive / in query'
+    query.split('/')
+      .tap { |x| (x.size > 0) or exitError "empty query" }
+      .each do |n|
+        n.split(',').each do |n|
+          unless (n =~ /^\d+(\-\d+)?$/) || (n == '@')
+            exitError "malformed query component '#{n}'"
+          end
+      end
+    end
+  end
+
+  def Validate.addFlag(argument)
+    argument.split('/').all? &:number? or exitError "malformed add argument"
   end
 end
 
