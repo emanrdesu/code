@@ -40,9 +40,6 @@ def yes_or_no?(q, pre=nil, post=nil)
   end
 end
 
-
-
-
 def yornal_depth (dir)
   return 0 if not File.directory? dir
   Dir.children(dir)
@@ -130,6 +127,12 @@ end
 class Array
   def jomp(x)
     self.join(x).chomp(x)
+  end
+end
+
+class Symbol
+  def +(symbol)
+    (self.to_s + symbol.to_s).to_sym
   end
 end
 
@@ -223,8 +226,8 @@ class Yornal
     end
   end
 
-  def entries()
-    self.query('@').map { |p| Entry.fromPath p }.sort
+  def entries(query = '@')
+    self.query(query).map { |p| Entry.fromPath p }.sort
   end
 
   # e.g. pattern: @/@/8, 2022/09/@ ; depends on yornal type (depth)
@@ -629,6 +632,7 @@ end
 Dir.chdir $yornalPath
 
 
+
 if ARGV[0] == "git"
   system ARGV.join(' ')
   exit
@@ -645,24 +649,43 @@ opts = Optimist::options do
   end
 
   opt :delete, "Delete selected entries"
+  opt :yes, "Assume yes when asked a question"
   opt :usage, "Print example flag usage", :type => :string
 
   $options.each_key do |option|
     [[:add], [:create, :type]]
-      .each { |set| conflicts set[0], option unless set[1..].any? option }
-    conflicts :edit, option unless [:edit, :last, :first, :query].any? option
+      .each do |set|
+        set.each { |o| conflicts o, option unless set.any? option }
+    end
   end
 
   conflicts :last, :first
-  conflicts :match, :regex
-  conflicts :print, :pp
+  conflicts :print, :pp, :delete, :edit
 end
 
 
+$yornalName = ARGV[0]
+(Yornal.report && exit) unless opts.keys.any?(/given/) || $yornalName
+$yornalName or exitError "yornal name must be given, see --usage"
+Yornal.list.any? $yornalName or exitError "yornal '#{$yornal}' does not exist"
+$yornal = Yornal.new($yornalName)
 
-$yornal = ARGV[0]
-(Yornal.report && exit) unless opts.keys.any?(/given/) || $yornal
-$yornal or exitError "yornal name must be given, see --usage"
-Yornal.list.any? $yornal or exitError "yornal '#{$yornal}' does not exist"
+$query = opts[:query] || '@'
+Validate.queryFlag $query
+
+$entries = $yornal.entries($query)
+
+if opts[:first_given] || opts[:last_given]
+  method = opts[:first_given] ? :first : :last
+  $entries = [$yornal.send(method, *Parse.lastFirstFlag(opts[method]), $entries)].flatten
+end
+
+if opts[:match_given]
+  $entries.filter! { |e| e.contains? opts[:match] }
+end
+
+if opts[:regex_given]
+  $entries.filter! { |e| e.matches? opts[:regex] }
+end
 
 p opts
