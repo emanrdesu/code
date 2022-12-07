@@ -191,9 +191,11 @@ class Yornal
   end
 
   def Yornal.report
+    spacing = 6
     Yornal.list
       .map { |y| [y, Yornal.new(y).entries.size] }
-      .each { |y, c| printf "%-10s %d\n", y, c }
+      .tap { |yc| spacing = yc.map(&:last).unshift(spacing).max + 3 }
+      .each { |y, c| printf "%-#{spacing}s %d\n", y, c }
   end
 
   ## instance methods
@@ -587,30 +589,6 @@ $options = {
   }
 }
 
-opts = Optimist::options do
-  def documentation(option)
-    $options[option][:syntax]
-      .then(&Format.m(:syntax))
-  end
-
-  $options.each do |option ,hash|
-    opt option, documentation(option), :type => :string, :default => hash[:default]
-  end
-
-  opt :delete, "Delete selected entries"
-  opt :usage, "Print example flag usage", :type => :string
-  opt :verbose, "Print more information"
-
-  $options.each_key do |option|
-    [[:add], [:create, :type]]
-      .each { |set| conflicts set[0], option unless set[1..].any? option }
-    conflicts :edit, option unless [:edit, :last, :first, :query].any? option
-  end
-
-  conflicts :last, :first
-  conflicts :match, :regex
-  conflicts :print, :pp
-end
 
 
 ### main
@@ -632,6 +610,40 @@ end
 Dir.chdir $yornalPath
 
 
+if ARGV[0] == "git"
+  system ARGV.join(' ')
+  exit
+end
+
+opts = Optimist::options do
+  def documentation(option)
+    $options[option][:syntax]
+      .then(&Format.m(:syntax))
+  end
+
+  $options.each do |option, hash|
+    opt option, documentation(option), :type => :string, :default => hash[:default]
+  end
+
+  opt :delete, "Delete selected entries"
+  opt :usage, "Print example flag usage", :type => :string
+
+  $options.each_key do |option|
+    [[:add], [:create, :type]]
+      .each { |set| conflicts set[0], option unless set[1..].any? option }
+    conflicts :edit, option unless [:edit, :last, :first, :query].any? option
+  end
+
+  conflicts :last, :first
+  conflicts :match, :regex
+  conflicts :print, :pp
+end
+
+
 
 $yornal = ARGV[0]
-Yornal.report unless opts.keys.any?(/given/) || $yornal
+(Yornal.report && exit) unless opts.keys.any?(/given/) || $yornal
+$yornal or exitError "yornal name must be given, see --usage"
+Yornal.list.any? $yornal or exitError "yornal '#{$yornal}' does not exist"
+
+p opts
