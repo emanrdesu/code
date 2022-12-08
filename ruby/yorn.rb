@@ -2,8 +2,6 @@
 
 ### yorn is a program for managing journals (yornals)
 ### uses git for version control
-### TODO: add documentation
-### TODO: implement querying yornal names
 ### FUTURE: support encryption
 
 require 'optimist'
@@ -12,12 +10,12 @@ require 'openssl'
 ### globals
 
 DEPTH = {
-  box:   0,
-  year:  1,
-  month: 2,
-  day:   3,
-  hour:  4,
-  min:   5
+  box:    0,
+  year:   1,
+  month:  2,
+  day:    3,
+  hour:   4,
+  minute: 5, min: 5
 }
 
 SHA256 = OpenSSL::Digest.new("SHA256")
@@ -26,11 +24,12 @@ SHA256 = OpenSSL::Digest.new("SHA256")
 
 alias m method
 
-def yes_or_no?(q, pre=nil, post=nil)
+def yes_or_no?(question, pre=nil, post=nil)
   puts pre if pre
   loop do
-    print (q + ' (yes/no): ')
-    answer = gets.chomp.downcase
+    print (question + ' (yes/no): ')
+    answer = $stdin.gets ; die(1) if answer.nil?
+    answer = answer.chomp.downcase
     if ["yes", "y", "no", "n"].any?(answer) then
       puts post if post
       return ["yes", "y"].any?(answer)
@@ -38,6 +37,11 @@ def yes_or_no?(q, pre=nil, post=nil)
       puts "Please enter 'yes', 'y', 'n', or 'no'."
     end
   end
+end
+
+def die(status = 0)
+  yield if block_given?
+  exit(status)
 end
 
 def yornal_depth (dir)
@@ -64,7 +68,8 @@ def mkdir(path)
 end
 
 def exitError(message, *args)
-  STDERR.printf "Error: " + message + "\n", *args ; exit 1
+  STDERR.printf "Error: " + message + "\n", *args
+  die 1
 end
 
 ### stdlib class additions
@@ -94,7 +99,9 @@ class Hash
 end
 
 class Time
-  def box() '' end
+  def box
+    ''
+  end
 
   def path(x)
     # only first 5 elements are relevant (m,h,d,mon,y)
@@ -133,6 +140,13 @@ end
 class Symbol
   def +(symbol)
     (self.to_s + symbol.to_s).to_sym
+  end
+end
+
+class Object
+  def when(n = self)
+    (n === self) and yield self
+    self
   end
 end
 
@@ -194,11 +208,16 @@ class Yornal
   end
 
   def Yornal.report
-    spacing = 6
+    spacing = nil ; countSpacing = nil
     Yornal.list
       .map { |y| [y, Yornal.new(y).entries.size] }
-      .tap { |yc| spacing = yc.map(&:last).unshift(spacing).max + 3 }
-      .each { |y, c| printf "%-#{spacing}s %d\n", y, c }
+      .tap { |ycs|
+        spacing = ycs.map(&:first).map(&:size).max + 2
+        countSpacing = ycs.map(&:last).map(&:to_s).map(&:size).max
+        printf "%-#{spacing}s %-#{countSpacing}s  type\n", "yornal", "#"
+      }.each do |y, c|
+      printf "%-#{spacing}s %-#{countSpacing}d  %s\n", y, c, Yornal.new(y).type
+    end
   end
 
   ## instance methods
@@ -299,11 +318,13 @@ class Entry
   end
 
   def contains?(word)
-    File.read(path).downcase =~ Regexp.new(word.downcase)
+    File.read(path) =~ Regexp.new(word, :i)
   end
 
   def matches?(regex)
     File.read(path) =~ Regexp.new(regex)
+  rescue RegexpError
+    exitError "Malformed regexp"
   end
 
   def edit(editor=editor(), action=:modify)
@@ -318,16 +339,16 @@ class Entry
   def delete(ask=true)
     pre = "You are about to delete yornal entry '#{name}'."
     question = "Are you sure you want to delete it?"
-    git(:rm, "#{name}") if (!ask || yes_or_no?(question, pre))
+    git(:rm, "#{path}") if (!ask || yes_or_no?(question, pre))
   end
 
-  def print(delimiter="\n\n")
+  def printout(delimiter="\n\n")
     $stdout.print File.read(path)
     $stdout.print delimiter
   end
 
-  def print_path(delimiter="\n")
-    $stdout.print path
+  def printpath(delimiter="\n", fullpath)
+    $stdout.print (fullpath ? path : name)
     $stdout.print delimiter
   end
 end
@@ -336,11 +357,11 @@ end
 ## documentation and command line parsing
 
 class Format
-  def Format.examples(examples)
-    return [] if examples.size == 0
-    examples
+  def Format.examples(option, hash)
+    return if hash[:examples].nil?
+    hash[:examples]
       .map { |e| (' ' *  2) + e }
-      .unshift("examples:")
+      .unshift("--#{option} examples:")
       .join("\n")
   end
 
@@ -363,17 +384,32 @@ class Format
       "october",
       "november",
       "december"
-    ] .map { |m| [m[0..2], m].map {|x| Regexp.new(x)} }
+    ] .map { |m| [m, m[0..2]].map {|x| Regexp.new(x)} }
       .zip(1..) do |names, i|
       names.each { |n| string.gsub!(n, i.to_s) }
     end
 
     string
   end
+
+  def Format.special(x)
+    eval "\"#{x}\""
+  end
 end
 
 
 class Parse
+
+  @@timeFields = [
+    [:week , "w", "week"],
+    [:second, "s", "second"],
+    [:year, "y", "year"],
+    [:month, "m", "mon", "month"],
+    [:day, "d", "day"],
+    [:hour, "h", "hour"],
+    [:minute, "min", "minute"]
+  ]
+
   def Parse.editFlag(argument, entries) # => Time
     head = -> n=0 { entries[n] }
     tail = -> n=0 { entries[entries.size - 1 + n] }
@@ -382,13 +418,13 @@ class Parse
     location, *operands = argument.split(/[\+\-]/)
     ops = argument.scan(/[\+\-]/)
 
-    { ["t", "tail"] => tail,
+    { ["", "t", "tail"] => tail,
       ["h", "head"] => head,
       ["m", "mid", "middle"] => middle
     } .find { |k,v| k.any? location }
       .tap {|_| _ or exitError "undefined location '#{location}'" }
       .then do |_, locator|
-      return locator[].to_t if operands.size == 0
+      return locator[].to_t if operands.empty?
 
       arg = 0
       if operands[0].number?
@@ -397,7 +433,7 @@ class Parse
 
       op = ops.shift
       anchor = locator[arg]
-      anchor or exitError("entry $#{location}#{arg.to_ss} does not exist")
+      anchor or exitError("entry #{location}#{arg.to_ss} does not exist")
 
       operands.map {|x| self.timeLiteral x}
         .zip(ops + ['']).flatten.join
@@ -407,6 +443,10 @@ class Parse
 
   def Parse.lastFirstFlag(argument) # [Symbol, Integer]
     return [:entry, argument.to_i] if argument.number?
+
+    @@timeFields.find {|_, *forms| forms.any? argument}
+      .when(Array) { argument = "1.#{argument}" }
+
     operands = argument.split(/[\+\-]/)
     ops = argument.scan(/[\+\-]/)
 
@@ -419,16 +459,15 @@ class Parse
     x =~ /\d+\.[a-z]+/ or exitError("malformed time spec '#{x}'")
     n, field = x.split('.')
 
-    [ [:second, "s", "sec", "second"],
-      [:minute, "min", "minute"],
-      [:hour, "h", "hour"],
-      [:day, "d", "day"],
-      [:week, "w", "week"],
-      [:month, "mon", "month"],
-      [:year, "y", "year"]
-    ] .find { |m, *forms| forms.any? field }
+    @@timeFields
+      .find { |m, *forms| forms.any? field }
       .tap {|_| _ or exitError "undefined time field '#{field}'"}
       .slice(0).then { |m| n.to_i.send(m) }
+  end
+
+  def Parse.yornalType(type)
+    (@@timeFields[2..] + [[:box, "x", "box"]])
+      .find { |_, *forms| forms.any? type }
   end
 end
 
@@ -461,8 +500,8 @@ $options = {
       "[$n | timeSpan[±timeSpan]*]",
       "  where $j, $n ∈ NaturalNumber",
       "  and timeSpan ::= [$j.]dateAttr",
-      "  and dateAttr ::= y[ear] | mon[th] | w[eek]",
-      "                |  d[ay]  | h[our]  | min[ute]"
+      "  and dateAttr ::= y[ear] | m[on[th]] | w[eek]",
+      "                | d[ay] | h[our] | min[ute]"
     ],
 
     examples: [
@@ -475,7 +514,6 @@ $options = {
       "# all the entries in qux in the past 2 month + 3 days",
       "yorn qux --last 3.day+2.mon",
       "# default action for multiple entries is to print entry paths",
-      "# see -h for recommended usage"
     ]
   },
 
@@ -486,12 +524,12 @@ $options = {
       "[$n | timeSpan[±timeSpan]*]",
       "  where $j, $n ∈ NaturalNumber",
       "  and timeSpan ::= [$j.]dateAttr",
-      "  and dateAttr ::= y[ear] | mon[th] | w[eek] ",
-      "                |   d[ay] | h[our]  | min[ute]"
+      "  and dateAttr ::= y[ear] | m[on[th]] | w[eek]",
+      "                | d[ay] | h[our] | min[ute]"
     ],
 
     examples: [
-      "# first 5 entries in baz",
+      "# select first 5 entries in baz",
       "yorn baz --first 5",
       "# select entries in the period between the first",
       "# entry in pom and 2 months after the entry",
@@ -501,19 +539,22 @@ $options = {
   },
 
   query: {
+    default: '@',
+
     syntax: [ "$year[/$month[/$day[/$hour[/$minute]]]]",
               "  where $year,$month,$day,$hour and $minute",
               "  ::= int[,(int | int-int)]* | \"@\"",
-              "  $month can be any month name as well" ],
+              "  $month can be any month name as well\n " ],
+
     examples: [
       "# select all entries in the 'ter' yornal (default/automatic)",
-      "yorn ter --query @",
+      "yorn ter -q",
       "# select all entries in any year where the month is august",
       "yorn hue --query @/aug",
       "# selects all entries even though day was specified",
       "# because querying only cares about yornal set fields",
       "# i.e. only the two @'s are looked at in this case",
-      "yorn monthlyJournal --query @/@/1"
+      "yorn monthlyJournal -q @/@/1"
     ]
   },
 
@@ -522,9 +563,10 @@ $options = {
     syntax: [
       "loc[±$n | ±$k[±$i.dateAttr]*]",
       "  where $n, $k, $i ∈ NaturalNumber",
-      "    and loc ::= t[ail] | h[ead] | m[id[dle]]",
-      "    and dateAttr ::= y[ear] | mon[th]",
-      "                  | d[ay] | h[our] | min[ute]"
+      "    and loc ::= [tail] | h[ead] | m[id[dle]]",
+      "    and dateAttr ::= y[ear] | m[on[th]]",
+      "                  | w[eek] | d[ay]",
+      "                  | h[our] | min[ute]"
     ],
 
     examples: [
@@ -557,7 +599,8 @@ $options = {
     examples: [
       "# select entries in last 12 years",
       "# that have the word \"money\" in it  }",
-      "yorn foo -l 12.y -m money"
+      "yorn foo -l 12.y -m money",
+      "# case insensitive"
     ]
   },
 
@@ -585,24 +628,24 @@ $options = {
     default: "day",
 
     syntax: [
-      "y[ear[ly]] | mon[th[ly]] | w[eek[ly]]",
-      "(d|day|daily) | h[our[ly]] | m[inute[ly]]",
-      "s[econd[ly]] | box"
+      "y[ear] | m[on[th]] | d[ay] |",
+      "h[our] | min[ute]  | s[econd] | box",
     ],
-
-    examples: []
   },
 
   print: {
-    syntax: "$delimiter=\"\\n\\n\"",
+    default: '\\n#{\'#\' * 40}\\n',
+    syntax: "$delimiter",
     examples: [
       "# select all entries and print them without a delimiter",
       "yorn foo -q @ -p ''"
     ]
   },
 
-  pp: {
-    syntax: "$delimiter=\"\\n\" ; 'print path'",
+  print_path: {
+    default: "\\n",
+    short: :P,
+    syntax: "$delimiter",
     examples: [
       "# select last 3 entries and print paths",
       "# --print-path not needed as its default action",
@@ -632,7 +675,6 @@ end
 Dir.chdir $yornalPath
 
 
-
 if ARGV[0] == "git"
   system ARGV.join(' ')
   exit
@@ -645,32 +687,83 @@ opts = Optimist::options do
   end
 
   $options.each do |option, hash|
-    opt option, documentation(option), :type => :string, :default => hash[:default]
+    opt option, documentation(option),
+        :type => :string,
+        :default => hash[:default],
+        :short => hash[:short]
   end
 
-  opt :delete, "Delete selected entries"
+  opt :delete, "Delete selected entries or yornal"
   opt :yes, "Assume yes when asked a question"
-  opt :usage, "Print example flag usage", :type => :string
+  opt :usage, "Print example flag usage", :type => :string, :default => "all"
+  opt :full_path, "Print absolute path when printing paths", :short => :F
 
   $options.each_key do |option|
-    [[:add], [:create, :type]]
+    [[:add], [:usage], [:create, :type]]
       .each do |set|
         set.each { |o| conflicts o, option unless set.any? option }
     end
   end
 
   conflicts :last, :first
-  conflicts :print, :pp, :delete, :edit
+  conflicts :print, :print_path, :delete, :edit
 end
+
+$given = opts.keys
+           .filter {|o| o =~ /given/}
+           .map {|s| s.to_s[0..(-7)].to_sym}
+
+
+[:print, :print_path]
+  .each { |o| opts[o] = Format.special(opts[o]) }
+
+
+die {
+  $options[opts[:usage].to_sym]
+    .when(Hash) do |hash|
+      puts Format.examples(opts[:usage], hash)
+  end
+    .when(nil) do
+      opts[:usage] == "all" or exitError("unrecognized flag '#{opts[:usage]}'")
+      $options.each do |option, hash|
+        Format.examples(option.to_s.gsub('_', '-'), hash)
+          .when(String) { |x| puts x ; puts }
+      end
+  end
+} if $given == [:usage]
+
+die {
+  Parse.yornalType(opts[:type])
+    .when(Array) do |type|
+      Yornal.create(opts[:create], type[0])
+  end
+    .when(nil) { exitError "invalid type '#{opts[:type]}'" }
+} if [[:create], [:create, :type]].any? $given
 
 
 $yornalName = ARGV[0]
-(Yornal.report && exit) unless opts.keys.any?(/given/) || $yornalName
+die { Yornal.report } if $given.empty? && !$yornalName
 $yornalName or exitError "yornal name must be given, see --usage"
-Yornal.list.any? $yornalName or exitError "yornal '#{$yornal}' does not exist"
+Yornal.list.any? $yornalName or exitError "yornal '#{$yornalName}' does not exist"
 $yornal = Yornal.new($yornalName)
 
-$query = opts[:query] || '@'
+
+die {
+  $yornal.edit
+} if $given.empty?
+
+die {
+  $add = Format.monthswap(opts[:add])
+  Validate.addFlag($add)
+  $yornal.edit(editor, Time.new(*$add.split('/')))
+} if $given == [:add]
+
+die {
+  Yornal.delete($yornalName, !opts[:yes])
+} if [[:delete], [:delete, :yes]].any?($given)
+
+
+$query = Format.monthswap(opts[:query])
 Validate.queryFlag $query
 
 $entries = $yornal.entries($query)
@@ -688,4 +781,20 @@ if opts[:regex_given]
   $entries.filter! { |e| e.matches? opts[:regex] }
 end
 
-p opts
+die if $entries.empty?
+
+[:print, :print_path, :delete, :edit].intersection($given).empty?
+  .when(false) do
+    opts[:print_given] and $entries.each { |e| e.printout(opts[:print]) }
+    opts[:print_path_given] and
+      $entries.each { |e| e.printpath(opts[:print_path], opts[:full_path]) }
+    opts[:delete_given] and $entries.each { |e| e.delete(!opts[:yes]) }
+    opts[:edit_given] and $yornal.edit(editor, Parse.editFlag(opts[:edit], $entries))
+    die
+end
+
+if ($entries.size == 1 && $given != [:query])
+  $entries.pop.edit
+else
+  $entries.each { |e| e.printpath(opts[:print_path], opts[:full_path]) }
+end
