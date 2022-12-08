@@ -68,8 +68,7 @@ def mkdir(path)
 end
 
 def exitError(message, *args)
-  STDERR.printf "Error: " + message + "\n", *args
-  die 1
+  STDERR.printf "Error: " + message + "\n", *args ; die 1
 end
 
 ### stdlib class additions
@@ -212,6 +211,7 @@ class Yornal
     Yornal.list
       .map { |y| [y, Yornal.new(y).entries.size] }
       .tap { |ycs|
+        die { puts "No yornals available. Create one with --create" } if ycs.empty?
         spacing = ycs.map(&:first).map(&:size).max + 2
         countSpacing = ycs.map(&:last).map(&:to_s).map(&:size).max
         printf "%-#{spacing}s %-#{countSpacing}s  type\n", "yornal", "#"
