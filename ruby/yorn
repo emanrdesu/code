@@ -56,11 +56,18 @@ def tree (dir)
   Dir.children(dir).map {|f| tree [dir,f].join('/')}.flatten
 end
 
-def editor
-  editors = ["zile", "ed", "nano", "vi", "emacs", "vim", "code"]
-  path = ENV["PATH"].split(':')
-  ENV["EDITOR"] or editors.find {|b| path.any? {|p| File.exist? "#{p}/#{b}"}} or "cat"
+
+def defbin(x, fallback: [])
+  define_method(x) do
+    binaries = fallback
+    path = ENV["PATH"].split(':')
+    ENV[x.to_s.upcase] or
+      binaries.find {|b| path.any? {|p| File.exist? "#{p}/#{b}"}} or "cat"
+  end
 end
+
+defbin(:editor, fallback: ["zile", "nano", "vi", "emacs", "vim", "code"])
+defbin(:pager, fallback: ["less", "more"])
 
 def mkdir(path)
   system "mkdir -p #{path} > /dev/null" or
@@ -410,34 +417,49 @@ class Parse
     [:minute, "min", "minute"]
   ]
 
-  def Parse.editFlag(argument, entries) # => Time
-    head = -> n=0 { entries[n] }
-    tail = -> n=0 { entries[entries.size - 1 + n] }
-    middle = -> n=0 { entries[(entries.size / 2) + n] }
-
+  def Parse.editViewFlag(argument, entries)
     location, *operands = argument.split(/[\+\-]/)
     ops = argument.scan(/[\+\-]/)
 
-    { ["", "t", "tail"] => tail,
-      ["h", "head"] => head,
-      ["m", "mid", "middle"] => middle
+    { ["", "t", "tail"]      =>  proc { |a,n| a[a.size - 1 + n] },
+      ["h", "head"]          =>  proc { |a,n| a[n] },
+      ["m", "mid", "middle"] =>  proc { |a,n| a[(a.size / 2) + n] }
     } .find { |k,v| k.any? location }
       .tap {|_| _ or exitError "undefined location '#{location}'" }
       .then do |_, locator|
-      return locator[].to_t if operands.empty?
+        return locator[entries, 0].to_t if operands.empty?
+        yield location, operands, ops, locator
+    end
+  end
 
-      arg = 0
-      if operands[0].number?
-        arg = (ops.shift + operands.shift).to_i
-      end
+  def Parse.editFlag(argument, entries) # => Time
+    Parse.editViewFlag(argument, entries) do |*vars|
+      location, operands, ops, locator = vars
 
+      expr = operands.take_while(&:number?).zip(ops).map(&:reverse)
+      ops = ops[expr.size ..]
+      operands = operands[expr.size ..]
+
+      arg = eval expr.join || 0
       op = ops.shift
-      anchor = locator[arg]
+      anchor = locator[entries, arg]
       anchor or exitError("entry #{location}#{arg.to_ss} does not exist")
 
-      operands.map {|x| self.timeLiteral x}
-        .zip(ops + ['']).flatten.join
+      operands.map {|x| Parse.timeLiteral x}
+        .zip(ops).join
         .then { |time| anchor.to_t + (op == '+' ? 1 : -1) * (eval(time) || 0) }
+    end
+  end
+
+  def Parse.viewFlag(argument, entries) # Time
+    Parse.editViewFlag(argument, entries) do |*vars|
+      location, operands, ops, locator = vars
+
+      operands.all? &:number? or exitError("invalid --view argument")
+      (operands.size == ops.size) or exitError("invalid --view expression")
+      arg = eval ops.zip(operands).join || 0
+
+      locator[entries, arg].to_t
     end
   end
 
@@ -450,8 +472,8 @@ class Parse
     operands = argument.split(/[\+\-]/)
     ops = argument.scan(/[\+\-]/)
 
-    operands.map {|x| self.timeLiteral x}
-      .zip(ops + ['']).flatten.join
+    operands.map {|x| Parse.timeLiteral x}
+      .zip(ops).join
       .then { |r| [:time, eval(r)] }
   end
 
@@ -480,22 +502,22 @@ class Validate
       .each do |n|
         n.split(',').each do |n|
           unless (n =~ /^\d+(\-\d+)?$/) || (n == '@')
-            exitError "malformed query component '#{n}'"
+            exitError "malformed --query component '#{n}'"
           end
       end
     end
   end
 
   def Validate.addFlag(argument)
-    argument.split('/').all? &:number? or exitError "malformed add argument"
+    argument.split('/').all? &:number? or exitError "malformed --add argument"
   end
 end
 
 
 $options = {
+
   last: {
     default: "1",
-
     syntax: [
       "[$n | timeSpan[±timeSpan]*]",
       "  where $j, $n ∈ NaturalNumber",
@@ -519,7 +541,6 @@ $options = {
 
   first: {
     default: "1",
-
     syntax: [
       "[$n | timeSpan[±timeSpan]*]",
       "  where $j, $n ∈ NaturalNumber",
@@ -540,7 +561,6 @@ $options = {
 
   query: {
     default: '@',
-
     syntax: [ "$year[/$month[/$day[/$hour[/$minute]]]]",
               "  where $year,$month,$day,$hour and $minute",
               "  ::= int[,(int | int-int)]* | \"@\"",
@@ -578,6 +598,24 @@ $options = {
       "# edit entry 1.5 months before the fourth entry",
       "# entry won't exist, so will be created, and will be new first entry",
       "yorn hex -e head+3-2.month+15.day"
+    ]
+  },
+
+  view: {
+    default: "tail",
+    syntax: [
+      "location[±$n]*",
+      "  where location ::= [tail] | h[ead] | m[id[dle]]",
+      "    and $n ∈ NaturalNumber"
+    ],
+
+    examples: [
+      "# view last entry in foo",
+      "yorn foo -v",
+      "# view second entry in foo",
+      "yorn foo --view head+1",
+      "# view third from last entry in foo",
+      "yorn foo -v t-1-1"
     ]
   },
 
@@ -626,7 +664,6 @@ $options = {
 
   type: {
     default: "day",
-
     syntax: [
       "y[ear] | m[on[th]] | d[ay] |",
       "h[our] | min[ute]  | s[econd] | box",
@@ -706,7 +743,7 @@ opts = Optimist::options do
   end
 
   conflicts :last, :first
-  conflicts :print, :print_path, :delete, :edit
+  conflicts :print, :print_path, :delete, :edit, :view
 end
 
 $given = opts.keys
@@ -783,17 +820,18 @@ end
 
 die if $entries.empty?
 
-[:print, :print_path, :delete, :edit].intersection($given).empty?
+[:print, :print_path, :delete, :edit, :view].intersection($given).empty?
   .when(false) do
     opts[:print_given] and $entries.each { |e| e.printout(opts[:print]) }
     opts[:print_path_given] and
       $entries.each { |e| e.printpath(opts[:print_path], opts[:full_path]) }
     opts[:delete_given] and $entries.each { |e| e.delete(!opts[:yes]) }
     opts[:edit_given] and $yornal.edit(editor, Parse.editFlag(opts[:edit], $entries))
+    opts[:view_given] and $yornal.edit(pager, Parse.viewFlag(opts[:view], $entries))
     die
 end
 
-if ($entries.size == 1 && $given != [:query])
+if ($entries.size == 1 && !$given.any?(:query))
   $entries.pop.edit
 else
   $entries.each { |e| e.printpath(opts[:print_path], opts[:full_path]) }
