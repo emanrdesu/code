@@ -183,7 +183,7 @@ class Yornal
       name =~ regex and exitError("name cannot " + errorMessage)
     end
 
-    Yornal.list.find { |x| x == name } and exitError("yornal '#{name}' already exists")
+    Yornal.list.find {|x| x == name} and exitError("yornal '#{name}' already exists")
 
     if type == :box
       File.open($yornalPath + '/' + name, "w") {}
@@ -238,16 +238,16 @@ class Yornal
     $yornalPath + "/" + @name
   end
 
-  def edit(editor = editor(), time=Time.now)
+  def edit(editor = editor(), time=Time.now, ignore=nil)
     entryParent = [path, time.path(@type)].jomp('/')
     mkdir(entryParent) unless @type == :box
     entry = [entryParent, time.send(@type).to_s].jomp('/')
 
     if File.exists? entry
-      Entry.fromPath(entry).edit(editor)
+      Entry.fromPath(entry).edit(editor, :modify, ignore)
     else
       system "touch #{entry}"
-      Entry.fromPath(entry).edit(editor, action=:create)
+      Entry.fromPath(entry).edit(editor, action=:create, ignore)
       File.delete entry if File.size(entry) == 0
     end
   end
@@ -334,10 +334,10 @@ class Entry
     exitError "Malformed regexp"
   end
 
-  def edit(editor=editor(), action=:modify)
+  def edit(editor=editor(), action=:modify, ignore=nil)
     digest = SHA256.digest(File.read(path()))
     system "#{editor} #{path}"
-    unless digest == SHA256.digest(File.read(path()))
+    unless ignore || digest == SHA256.digest(File.read(path()))
       git(:add, path())
       git(:commit, "-m '#{action} #{@yornal.name} entry #{@date}'")
     end
@@ -417,7 +417,7 @@ class Parse
     [:minute, "min", "minute"]
   ]
 
-  def Parse.editViewFlag(argument, entries)
+  def Parse.entrySpecHelper(argument, entries)
     location, *operands = argument.split(/[\+\-]/)
     ops = argument.scan(/[\+\-]/)
 
@@ -433,14 +433,14 @@ class Parse
   end
 
   def Parse.editFlag(argument, entries) # => Time
-    Parse.editViewFlag(argument, entries) do |*vars|
+    Parse.entrySpecHelper(argument, entries) do |*vars|
       location, operands, ops, locator = vars
 
       expr = operands.take_while(&:number?).zip(ops).map(&:reverse)
       ops = ops[expr.size ..]
       operands = operands[expr.size ..]
 
-      arg = eval expr.join || 0
+      arg = (eval expr.join) || 0
       op = ops.shift
       anchor = locator[entries, arg]
       anchor or exitError("entry #{location}#{arg.to_ss} does not exist")
@@ -451,12 +451,12 @@ class Parse
     end
   end
 
-  def Parse.viewFlag(argument, entries) # Time
-    Parse.editViewFlag(argument, entries) do |*vars|
+  def Parse.entrySpec(argument, entries) # Time
+    Parse.entrySpecHelper(argument, entries) do |*vars|
       location, operands, ops, locator = vars
 
-      operands.all? &:number? or exitError("invalid --view argument")
-      (operands.size == ops.size) or exitError("invalid --view expression")
+      operands.all? &:number? or exitError("invalid argument '#{argument}'")
+      (operands.size == ops.size) or exitError("invalid expression")
       arg = eval ops.zip(operands).join || 0
 
       locator[entries, arg].to_t
@@ -508,8 +508,11 @@ class Validate
     end
   end
 
-  def Validate.addFlag(argument)
-    argument.split('/').all? &:number? or exitError "malformed --add argument"
+  def Validate.entryLiteral(argument)
+    fields = argument.split('/')
+    fields.all? &:number? or exitError "malformed entry literal"
+    (fields.size <= 6) or  exitError "only 6 datetime fields can be specified max"
+    fields.map(&:to_i).all? { |i| i >= 0} or exitError "negative numbers not allowed"
   end
 end
 
@@ -633,7 +636,7 @@ $options = {
   },
 
   match: {
-    syntax: "word",
+    syntax: "$word",
     examples: [
       "# select entries in last 12 years",
       "# that have the word \"money\" in it  }",
@@ -643,7 +646,7 @@ $options = {
   },
 
   regex: {
-    syntax: "$rubyRegex",
+    syntax: "$regex",
     examples: [
       "# select entries that have integers",
       "yorn foo -q @ -r \"^\\d+$\""
@@ -651,7 +654,7 @@ $options = {
   },
 
   create: {
-    syntax: "$yornalName",
+    syntax: "$yornalname",
     examples: [
       "# create day yornal named foo",
       "yorn -c foo",
@@ -671,7 +674,7 @@ $options = {
   },
 
   print: {
-    default: '\\n#{\'#\' * 40}\\n',
+    default: '\\n\\n#{\'#\' * 40}\\n\\n',
     syntax: "$delimiter",
     examples: [
       "# select all entries and print them without a delimiter",
@@ -690,7 +693,6 @@ $options = {
     ]
   }
 }
-
 
 
 ### main
@@ -725,9 +727,7 @@ opts = Optimist::options do
 
   $options.each do |option, hash|
     opt option, documentation(option),
-        :type => :string,
-        :default => hash[:default],
-        :short => hash[:short]
+        :type => :string, **hash
   end
 
   opt :delete, "Delete selected entries or yornal"
@@ -750,6 +750,9 @@ $given = opts.keys
            .filter {|o| o =~ /given/}
            .map {|s| s.to_s[0..(-7)].to_sym}
 
+def given?(option)
+  $given.any? option
+end
 
 [:print, :print_path]
   .each { |o| opts[o] = Format.special(opts[o]) }
@@ -790,9 +793,9 @@ die {
 } if $given.empty?
 
 die {
-  $add = Format.monthswap(opts[:add])
-  Validate.addFlag($add)
-  $yornal.edit(editor, Time.new(*$add.split('/')))
+  add = Format.monthswap(opts[:add])
+  Validate.entryLiteral(add)
+  $yornal.edit(editor, Time.new(*add.split('/')))
 } if $given == [:add]
 
 die {
@@ -805,33 +808,30 @@ Validate.queryFlag $query
 
 $entries = $yornal.entries($query)
 
-if opts[:first_given] || opts[:last_given]
+if given?(:first) || given?(:last)
   method = opts[:first_given] ? :first : :last
-  $entries = [$yornal.send(method, *Parse.lastFirstFlag(opts[method]), $entries)].flatten
+  type, seconds = Parse.lastFirstFlag(opts[method])
+  $entries = [$yornal.send(method, type, seconds, $entries)].flatten
 end
 
-if opts[:match_given]
-  $entries.filter! { |e| e.contains? opts[:match] }
-end
-
-if opts[:regex_given]
-  $entries.filter! { |e| e.matches? opts[:regex] }
-end
+$entries.filter! { |e| e.contains? opts[:match] } if given?(:match)
+$entries.filter! { |e| e.matches? opts[:regex] } if given?(:regex)
 
 die if $entries.empty?
 
-[:print, :print_path, :delete, :edit, :view].intersection($given).empty?
+[:print, :print_path, :delete, :edit, :view]
+  .intersection(given).empty?
   .when(false) do
-    opts[:print_given] and $entries.each { |e| e.printout(opts[:print]) }
-    opts[:print_path_given] and
+    given?(:print) and $entries.each { |e| e.printout(opts[:print]) }
+    given?(:print_path) and
       $entries.each { |e| e.printpath(opts[:print_path], opts[:full_path]) }
-    opts[:delete_given] and $entries.each { |e| e.delete(!opts[:yes]) }
-    opts[:edit_given] and $yornal.edit(editor, Parse.editFlag(opts[:edit], $entries))
-    opts[:view_given] and $yornal.edit(pager, Parse.viewFlag(opts[:view], $entries))
+    given?(:delete) and $entries.each { |e| e.delete(!opts[:yes]) }
+    given?(:edit) and $yornal.edit(editor, Parse.editFlag(opts[:edit], $entries))
+    given?(:view) and $yornal.edit(pager, Parse.entrySpec(opts[:view], $entries))
     die
 end
 
-if ($entries.size == 1 && !$given.any?(:query))
+if ($entries.size == 1 && !given?(:query))
   $entries.pop.edit
 else
   $entries.each { |e| e.printpath(opts[:print_path], opts[:full_path]) }
