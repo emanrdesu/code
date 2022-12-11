@@ -809,7 +809,7 @@ Validate.queryFlag $query
 $entries = $yornal.entries($query)
 
 if given?(:first) || given?(:last)
-  method = opts[:first_given] ? :first : :last
+  method = given?(:first) ? :first : :last
   type, seconds = Parse.lastFirstFlag(opts[method])
   $entries = [$yornal.send(method, type, seconds, $entries)].flatten
 end
@@ -820,7 +820,7 @@ $entries.filter! { |e| e.matches? opts[:regex] } if given?(:regex)
 die if $entries.empty?
 
 [:print, :print_path, :delete, :edit, :view]
-  .intersection(given).empty?
+  .intersection($given).empty?
   .when(false) do
     given?(:print) and $entries.each { |e| e.printout(opts[:print]) }
     given?(:print_path) and
