@@ -154,6 +154,11 @@ class Object
     (n === self) and yield self
     self
   end
+
+  def default
+    self and yield self
+    self
+  end
 end
 
 ### git functions
@@ -763,7 +768,7 @@ die {
     .when(Hash) do |hash|
       puts Format.examples(opts[:usage], hash)
   end
-    .when(nil) do
+    .default do
       opts[:usage] == "all" or exitError("unrecognized flag '#{opts[:usage]}'")
       $options.each do |option, hash|
         Format.examples(option.to_s.gsub('_', '-'), hash)
@@ -777,7 +782,7 @@ die {
     .when(Array) do |type|
       Yornal.create(opts[:create], type[0])
   end
-    .when(nil) { exitError "invalid type '#{opts[:type]}'" }
+    .default { exitError "invalid type '#{opts[:type]}'" }
 } if [[:create], [:create, :type]].any? $given
 
 
