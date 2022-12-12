@@ -151,13 +151,11 @@ end
 
 class Object
   def when(n = self)
-    (n === self) and yield self
-    self
+    (n === self) and yield self ; self
   end
 
   def default
-    self and yield self
-    self
+    self and yield self ; self
   end
 end
 
@@ -462,7 +460,7 @@ class Parse
 
       operands.all? &:number? or exitError("invalid argument '#{argument}'")
       (operands.size == ops.size) or exitError("invalid expression")
-      arg = eval ops.zip(operands).join || 0
+      arg = (eval ops.zip(operands).join) || 0
 
       locator[entries, arg].to_t
     end
