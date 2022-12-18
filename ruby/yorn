@@ -20,8 +20,6 @@ DEPTH = {
 
 SHA256 = OpenSSL::Digest.new("SHA256")
 
-#ENV["YORNAL_PATH"] = File.expand_path "~/.yornal.testing"
-
 ### utility Functions
 
 def yes_or_no?(question, pre=nil, post=nil)
@@ -700,6 +698,9 @@ $options = {
 
 ### main
 
+#system "rm ~/.yornal.testing"
+#ENV["YORNAL_PATH"] = File.expand_path "~/.yornal.testing"
+
 data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
 path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
 $yornalPath = File.expand_path path
@@ -716,11 +717,7 @@ end
 
 Dir.chdir $yornalPath
 
-
-if ARGV[0] == "git"
-  system ARGV.join(' ')
-  exit
-end
+(system ARGV.join ' ' and die) if ARGV[0] == "git"
 
 opts = Optimist::options do
   def documentation(option)
@@ -785,15 +782,13 @@ die {
 
 
 $yornalName = ARGV[0]
-die { Yornal.report } if $given.empty? && !$yornalName
+(Yornal.report and die) if ($given.empty? && !$yornalName)
 $yornalName or exitError "yornal name must be given, see --usage"
 Yornal.list.any? $yornalName or exitError "yornal '#{$yornalName}' does not exist"
 $yornal = Yornal.new($yornalName)
 
 
-die {
-  $yornal.edit
-} if $given.empty?
+($yornal.edit and die) if $given.empty?
 
 die {
   add = Format.monthswap(opts[:add])
