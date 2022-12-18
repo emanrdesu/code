@@ -155,7 +155,7 @@ class Object
   end
 
   def default
-    self and yield self ; self
+    self or yield
   end
 end
 
