@@ -22,8 +22,6 @@ SHA256 = OpenSSL::Digest.new("SHA256")
 
 ### utility Functions
 
-alias m method
-
 def yes_or_no?(question, pre=nil, post=nil)
   puts pre if pre
   loop do
@@ -132,7 +130,7 @@ class String
     self.strip_by(c).split(c)
   end
 
-  def number?
+  def integer?
     self =~ /^\d+$/
   end
 end
@@ -212,7 +210,7 @@ class Yornal
       .delete_if { |v| v =~ /\.git/ }
       .map { |w| w[$yornalPath.size + 1 ..] }
       .map { |x| x.split('/') }
-      .map { |y| y.take_while { |q| !q.number? } }
+      .map { |y| y.take_while { |q| !q.integer? } }
       .map { |z| z.jomp('/') }.uniq
   end
 
@@ -439,7 +437,7 @@ class Parse
     Parse.entrySpecHelper(argument, entries) do |*vars|
       location, operands, ops, locator = vars
 
-      expr = operands.take_while(&:number?).zip(ops).map(&:reverse)
+      expr = operands.take_while(&:integer?).zip(ops).map(&:reverse)
       ops = ops[expr.size ..]
       operands = operands[expr.size ..]
 
@@ -458,7 +456,7 @@ class Parse
     Parse.entrySpecHelper(argument, entries) do |*vars|
       location, operands, ops, locator = vars
 
-      operands.all? &:number? or exitError("invalid argument '#{argument}'")
+      operands.all? &:integer? or exitError("invalid argument '#{argument}'")
       (operands.size == ops.size) or exitError("invalid expression")
       arg = (eval ops.zip(operands).join) || 0
 
@@ -467,7 +465,7 @@ class Parse
   end
 
   def Parse.lastFirstFlag(argument) # [Symbol, Integer]
-    return [:entry, argument.to_i] if argument.number?
+    return [:entry, argument.to_i] if argument.integer?
 
     @@timeFields.find {|_, *forms| forms.any? argument}
       .when(Array) { argument = "1.#{argument}" }
@@ -513,7 +511,7 @@ class Validate
 
   def Validate.entryLiteral(argument)
     fields = argument.split('/')
-    fields.all? &:number? or exitError "malformed entry literal"
+    fields.all? &:integer? or exitError "malformed entry literal"
     (fields.size <= 6) or  exitError "only 6 datetime fields can be specified max"
     fields.map(&:to_i).all? { |i| i >= 0} or exitError "negative numbers not allowed"
   end
@@ -725,7 +723,7 @@ end
 opts = Optimist::options do
   def documentation(option)
     $options[option][:syntax]
-      .then(&Format.m(:syntax))
+      .then(&Format.method(:syntax))
   end
 
   $options.each do |option, hash|
