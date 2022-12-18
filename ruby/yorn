@@ -20,6 +20,8 @@ DEPTH = {
 
 SHA256 = OpenSSL::Digest.new("SHA256")
 
+#ENV["YORNAL_PATH"] = File.expand_path "~/.yornal.testing"
+
 ### utility Functions
 
 def yes_or_no?(question, pre=nil, post=nil)
