@@ -155,7 +155,7 @@ class Object
   end
 
   def default
-    self or yield
+    self or yield ; self
   end
 end
 
@@ -428,7 +428,7 @@ class Parse
       ["h", "head"]          =>  proc { |a,n| a[n] },
       ["m", "mid", "middle"] =>  proc { |a,n| a[(a.size / 2) + n] }
     } .find { |k,v| k.any? location }
-      .tap {|_| _ or exitError "undefined location '#{location}'" }
+      .default { exitError "undefined location '#{location}'" }
       .then do |_, locator|
         return locator[entries, 0].to_t if operands.empty?
         yield location, operands, ops, locator
