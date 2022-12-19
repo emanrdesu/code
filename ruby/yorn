@@ -20,6 +20,8 @@ DEPTH = {
 
 SHA256 = OpenSSL::Digest.new("SHA256")
 
+ARGV_COPY = ARGV.clone
+
 ### utility Functions
 
 def yes_or_no?(question, pre=nil, post=nil)
@@ -189,7 +191,7 @@ class Yornal
     if type == :box
       File.open($yornalPath + '/' + name, "w") {}
       git(:add , $yornalPath + '/' + name)
-      git(:commit, "-m \"create box yornal '#{name}'\"")
+      git(:commit, "-m \"Create box yornal '#{name}'\"")
     else
       mkdir [$yornalPath, name, Time.now.path(type)].jomp('/')
       Yornal.new(name).edit("echo > ")
@@ -220,7 +222,7 @@ class Yornal
       .map { |y| [y, Yornal.new(y).entries.size] }
       .tap { |ycs|
         die { puts "No yornals available. Create one with --create" } if ycs.empty?
-        spacing = ycs.map(&:first).map(&:size).max + 2
+        spacing = (ycs + [["yornal"]]).map(&:first).map(&:size).max + 1
         countSpacing = ycs.map(&:last).map(&:to_s).map(&:size).max
         printf "%-#{spacing}s %-#{countSpacing}s  type\n", "yornal", "#"
       }.each do |y, c|
@@ -245,10 +247,10 @@ class Yornal
     entry = [entryParent, time.send(@type).to_s].jomp('/')
 
     if File.exists? entry
-      Entry.fromPath(entry).edit(editor, :modify, ignore)
+      Entry.fromPath(entry).edit(editor, :Modify, ignore)
     else
       system "touch #{entry}"
-      Entry.fromPath(entry).edit(editor, action=:create, ignore)
+      Entry.fromPath(entry).edit(editor, action=:Create, ignore)
       File.delete entry if File.size(entry) == 0
     end
   end
@@ -335,7 +337,7 @@ class Entry
     exitError "Malformed regexp"
   end
 
-  def edit(editor=editor(), action=:modify, ignore=nil)
+  def edit(editor=editor(), action=:Modify, ignore=nil)
     digest = SHA256.digest(File.read(path()))
     system "#{editor} #{path}"
     unless ignore || digest == SHA256.digest(File.read(path()))
@@ -698,27 +700,6 @@ $options = {
 
 ### main
 
-#system "rm ~/.yornal.testing"
-#ENV["YORNAL_PATH"] = File.expand_path "~/.yornal.testing"
-
-data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
-path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
-$yornalPath = File.expand_path path
-
-if File.exist? $yornalPath
-  if not File.directory? $yornalPath
-    exitError("'%s' for yornal storage is not a directory", $yornalPath)
-  end
-else
-  mkdir $yornalPath
-  Dir.chdir $yornalPath
-  git(:init)
-end
-
-Dir.chdir $yornalPath
-
-(system ARGV.join ' ' and die) if ARGV[0] == "git"
-
 opts = Optimist::options do
   def documentation(option)
     $options[option][:syntax]
@@ -734,9 +715,10 @@ opts = Optimist::options do
   opt :yes, "Assume yes when asked a question"
   opt :usage, "Print example flag usage", :type => :string, :default => "all"
   opt :full_path, "Print absolute path when printing paths", :short => :F
+  opt :init, "Initialize yornal repository. Affected by YORNAL_PATH environment variable"
 
   $options.each_key do |option|
-    [[:add], [:usage], [:create, :type]]
+    [[:add], [:init], [:usage], [:create, :type]]
       .each do |set|
         set.each { |o| conflicts o, option unless set.any? option }
     end
@@ -753,6 +735,39 @@ $given = opts.keys
 def given?(option)
   $given.any? option
 end
+
+
+#system "rm -rf ~/.yornal.testing 2> /dev/null"
+#ENV["YORNAL_PATH"] = File.expand_path "~/.yornal.testing"
+
+data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
+path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
+$yornalPath = File.expand_path path
+
+if $given == [:init]
+  if Dir.exist? [$yornalPath, ".git"].join('/')
+    exitError "Yornal repository already exists"
+  end
+
+  mkdir $yornalPath
+  Dir.chdir $yornalPath
+  system "find . -type d -exec rm -rf {} 2> /dev/null"
+  git(:init) ; die
+end
+
+if Dir.exist? $yornalPath
+  unless Dir.exist? [$yornalPath, ".git"].join('/')
+    exitError "Yornal repository not set up for version control. See --init"
+  end
+
+  Dir.chdir $yornalPath
+else
+  puts "Yornal repository does not exist."
+  puts "Use --init for repository creation."
+  die
+end
+
+die { system ARGV_COPY.join ' ' } if ARGV_COPY[0] == "git"
 
 [:print, :print_path]
   .each { |o| opts[o] = Format.special(opts[o]) }
@@ -782,13 +797,13 @@ die {
 
 
 $yornalName = ARGV[0]
-(Yornal.report and die) if ($given.empty? && !$yornalName)
+(Yornal.report ; die) if ($given.empty? && !$yornalName)
 $yornalName or exitError "yornal name must be given, see --usage"
 Yornal.list.any? $yornalName or exitError "yornal '#{$yornalName}' does not exist"
 $yornal = Yornal.new($yornalName)
 
 
-($yornal.edit and die) if $given.empty?
+($yornal.edit ; die) if $given.empty?
 
 die {
   add = Format.monthswap(opts[:add])
