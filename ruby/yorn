@@ -700,6 +700,24 @@ $options = {
 
 ### main
 
+#system "rm -rf ~/.yornal.testing 2> /dev/null"
+#ENV["YORNAL_PATH"] = File.expand_path "~/.yornal.testing"
+
+data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
+path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
+$yornalPath = File.expand_path path
+
+
+die {
+  if Dir.exist?($yornalPath)
+    Dir.chdir $yornalPath
+    system ARGV.join ' '
+  else
+    exitError "Yornal repository does not exist."
+  end
+} if ARGV[0] == "git"
+
+
 opts = Optimist::options do
   def documentation(option)
     $options[option][:syntax]
@@ -736,14 +754,6 @@ def given?(option)
   $given.any? option
 end
 
-
-#system "rm -rf ~/.yornal.testing 2> /dev/null"
-#ENV["YORNAL_PATH"] = File.expand_path "~/.yornal.testing"
-
-data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
-path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
-$yornalPath = File.expand_path path
-
 if $given == [:init]
   if Dir.exist? [$yornalPath, ".git"].join('/')
     exitError "Yornal repository already exists"
@@ -766,11 +776,6 @@ else
   puts "Use --init for repository creation."
   die
 end
-
-die { system ARGV_COPY.join ' ' } if ARGV_COPY[0] == "git"
-
-[:print, :print_path]
-  .each { |o| opts[o] = Format.special(opts[o]) }
 
 
 die {
@@ -831,6 +836,9 @@ $entries.filter! { |e| e.contains? opts[:match] } if given?(:match)
 $entries.filter! { |e| e.matches? opts[:regex] } if given?(:regex)
 
 die if $entries.empty?
+
+[:print, :print_path]
+  .each { |p| opts[p] = Format.special(opts[p]) }
 
 [:print, :print_path, :delete, :edit, :view]
   .intersection($given).empty?
