@@ -74,6 +74,10 @@ def mkdir(path)
     exitError("could not create directory '%s'", path)
 end
 
+def touch(path)
+  File.open(path, "w") {}
+end
+
 def exitError(message, *args)
   STDERR.printf "Error: " + message + "\n", *args ; die 1
 end
@@ -189,7 +193,7 @@ class Yornal
     Yornal.list.find {|x| x == name} and exitError("yornal '#{name}' already exists")
 
     if type == :box
-      File.open($yornalPath + '/' + name, "w") {}
+      touch($yornalPath + '/' + name)
       git(:add , $yornalPath + '/' + name)
       git(:commit, "-m \"Create box yornal '#{name}'\"")
     else
@@ -209,8 +213,8 @@ class Yornal
 
   def Yornal.list
     tree($yornalPath)
-      .delete_if { |v| v =~ /\.git/ }
       .map { |w| w[$yornalPath.size + 1 ..] }
+      .delete_if { |v| v =~ /^\./ }
       .map { |x| x.split('/') }
       .map { |y| y.take_while { |q| !q.integer? } }
       .map { |z| z.jomp('/') }.uniq
@@ -762,7 +766,9 @@ if $given == [:init]
   mkdir $yornalPath
   Dir.chdir $yornalPath
   system "find . -type d -exec rm -rf {} 2> /dev/null"
-  git(:init) ; die
+  git(:init)
+
+  die
 end
 
 if Dir.exist? $yornalPath
