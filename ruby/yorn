@@ -73,7 +73,13 @@ def mkdir(path)
 end
 
 def touch(path)
-  File.open(path, "w") {}
+  splitPath = path.split '/'
+  if splitPath.size == 1
+    File.open(path, "w") {}
+  else
+    mkdir(splitPath[..-2].join('/'))
+    File.open(path, "w") {}
+  end
 end
 
 def exitError(message, *args)
