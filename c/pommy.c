@@ -30,21 +30,16 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void * draw_worker(void * vargp) {
   while(1) {
-    pthread_mutex_lock(&mutex);
-
     if(stop) {
       pthread_mutex_unlock(&mutex);
       return NULL;
     }
-
-    pthread_mutex_unlock(&mutex);
 
     // draw digits
     sleep(1);
     // decrement timer
   }
 }
-
 
 void create_worker(pthread_t * ptp) {
   pthread_create(ptp, NULL, draw_worker, NULL);
