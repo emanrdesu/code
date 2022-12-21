@@ -24,7 +24,31 @@ int digit[] = {
 };
 
 int stop = 0;
+int redraw = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+void * draw_worker(void * vargp) {
+  while(1) {
+    pthread_mutex_lock(&mutex);
+
+    if(stop) {
+      pthread_mutex_unlock(&mutex);
+      return NULL;
+    }
+
+    pthread_mutex_unlock(&mutex);
+
+    // draw digits
+    sleep(1);
+    // decrement timer
+  }
+}
+
+
+void create_worker(pthread_t * ptp) {
+  pthread_create(ptp, NULL, draw_worker, NULL);
+}
 
 
 int main(int argc, char ** argv) {
@@ -36,10 +60,20 @@ int main(int argc, char ** argv) {
   // libnotify initialization
   notify_init ("pommy");
 
+
+  pthread_t draw_thread;
+  create_worker(&draw_thread);
+
   while(1) {
     switch(getch()) {
     case 32: // space
-      // code
+      pthread_mutex_lock(&mutex);
+      stop = stop ? 0 : 1;
+      pthread_mutex_unlock(&mutex);
+
+      if (stop == 0)
+        create_worker(&draw_thread);
+
       break;
     case 113: // q
       goto leave;
