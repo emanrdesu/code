@@ -16,8 +16,24 @@ int main() {
   // libnotify initialization
   notify_init ("pommy");
 
+  while(1) {
+    switch(getch()) {
+    case 32: // space
+      // code
+      break;
+    case 113: // q
+      goto leave;
+      break;
+    case 410: // resize
+      // code
+      break;
+    }
+  }
+
+ leave:
   // wrap up
   endwin();        // ncurses
   notify_uninit(); // libnotify
+
 	return 0;
 }
