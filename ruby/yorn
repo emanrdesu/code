@@ -20,8 +20,6 @@ DEPTH = {
 
 SHA256 = OpenSSL::Digest.new("SHA256")
 
-ARGV_COPY = ARGV.clone
-
 ### utility Functions
 
 def yes_or_no?(question, pre=nil, post=nil)
@@ -161,6 +159,11 @@ class Object
   def default
     self or yield ; self
   end
+
+  def assert(n = self)
+    (block_given? ? yield(self) : (n === self)) or throw StandardError
+    self
+  end
 end
 
 ### git functions
@@ -176,6 +179,16 @@ class Yornal
 
   ## class methods
 
+  def Yornal.dotYornalNew(message)
+    File.write(
+      $dotyornal,
+      Yornal.list.tap { |h| yield h }
+    )
+
+    git(:add, $dotyornal)
+    git(:commit, "-m '#{message}'")
+  end
+
   def Yornal.create(name, type)
     {  /^\./   =>  "begin with a dot",
        /^\//   =>  "begin with /",
@@ -190,39 +203,43 @@ class Yornal
       name =~ regex and exitError("name cannot " + errorMessage)
     end
 
-    Yornal.list.find {|x| x == name} and exitError("yornal '#{name}' already exists")
+    Yornal.list.find {|n,t| n == name} and exitError("yornal '#{name}' already exists")
 
-    if type == :box
-      touch($yornalPath + '/' + name)
-      git(:add , $yornalPath + '/' + name)
-      git(:commit, "-m \"Create box yornal '#{name}'\"")
-    else
-      mkdir [$yornalPath, name, Time.now.path(type)].jomp('/')
-      Yornal.new(name).edit("echo > ")
+    [ $yornalPath, name ].jomp('/')
+      .tap(&method(type == :box ? :touch : :mkdir))
+      .then { |f| git(:add, f) if type == :box }
+
+    message = "Create #{type} yornal '#{name}'"
+    Yornal.dotYornalNew(message) do |h|
+      h[name] = type
     end
   end
 
   def Yornal.delete(name, ask=true)
-    Yornal.list.find { |x| x == name } or exitError("'#{name}' yornal doesn't exist")
+    Yornal.list.find { |n,t| n == name } or exitError("'#{name}' yornal doesn't exist")
     pre = "You are about to delete yornal '#{name}'."
     question = "Are you sure you want to delete it?"
     if (!ask || yes_or_no?(question, pre))
       Yornal.new(name).entries.each { |e| e.delete(ask=false) }
     end
+
+    message = "Delete #{name} yornal"
+    Yornal.dotYornalNew(message) do |h|
+      h.delete name
+    end
+
+    system "rm -rf #{name} 2> /dev/null"
   end
 
   def Yornal.list
-    tree($yornalPath)
-      .map { |w| w[$yornalPath.size + 1 ..] }
-      .delete_if { |v| v =~ /^\./ }
-      .map { |x| x.split('/') }
-      .map { |y| y.take_while { |q| !q.integer? } }
-      .map { |z| z.jomp('/') }.uniq
+    eval(File.read($dotyornal)).assert(Hash)
+  rescue Exception
+    exitError "Malformed .yornal file"
   end
 
   def Yornal.report
     spacing = nil ; countSpacing = nil
-    Yornal.list
+    Yornal.list.keys
       .map { |y| [y, Yornal.new(y).entries.size] }
       .tap { |ycs|
         die { puts "No yornals available. Create one with --create" } if ycs.empty?
@@ -238,7 +255,7 @@ class Yornal
 
   def initialize(name)
     @name = name
-    @type = DEPTH.flip[yornal_depth(path())]
+    @type = Yornal.list[name]
   end
 
   def path
@@ -710,7 +727,7 @@ $options = {
 data_dir = (ENV["XDG_DATA_HOME"] and (File.expand_path ENV["XDG_DATA_HOME"]) + "/yornal")
 path = (ENV["YORNAL_PATH"] or data_dir or "~/.yornal")
 $yornalPath = File.expand_path path
-
+$dotyornal = [$yornalPath, '.yornal'].jomp('/')
 
 die {
   if Dir.exist?($yornalPath)
@@ -767,16 +784,20 @@ if $given == [:init]
   Dir.chdir $yornalPath
   system "find . -type d -exec rm -rf {} 2> /dev/null"
   git(:init)
-
+  File.open($dotyornal, "w") { |f| f.print "{}" }
+  git(:add, $dotyornal)
+  git(:commit, "-m 'Create yornal repository'")
   die
 end
 
 if Dir.exist? $yornalPath
-  unless Dir.exist? [$yornalPath, ".git"].join('/')
-    exitError "Yornal repository not set up for version control. See --init"
-  end
-
   Dir.chdir $yornalPath
+
+  Dir.exist?(".git") or
+    exitError "Yornal repository not set up for version control. See --init"
+
+  File.exist?($dotyornal) or
+    exitError ".yornal file does not exist. Manually create it."
 else
   puts "Yornal repository does not exist."
   puts "Use --init for repository creation."
@@ -804,13 +825,15 @@ die {
       Yornal.create(opts[:create], type[0])
   end
     .default { exitError "invalid type '#{opts[:type]}'" }
-} if [[:create], [:create, :type]].any? $given
+} if [ [:create],
+       [:create, :type],
+     ].any? { |x| x.union($given) == $given.sort }
 
 
 $yornalName = ARGV[0]
 (Yornal.report ; die) if ($given.empty? && !$yornalName)
 $yornalName or exitError "yornal name must be given, see --usage"
-Yornal.list.any? $yornalName or exitError "yornal '#{$yornalName}' does not exist"
+Yornal.list.keys.any? $yornalName or exitError "yornal '#{$yornalName}' does not exist"
 $yornal = Yornal.new($yornalName)
 
 
@@ -824,7 +847,9 @@ die {
 
 die {
   Yornal.delete($yornalName, !opts[:yes])
-} if [[:delete], [:delete, :yes]].any?($given)
+} if [ [:delete, :yes],
+       [:delete]
+     ].any? { |x| x.union($given) == $given.sort }
 
 
 $query = Format.monthswap(opts[:query])
