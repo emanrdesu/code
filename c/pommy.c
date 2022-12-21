@@ -7,6 +7,9 @@
 // compile command:
 // gcc -o pommy `pkg-config --cflags --libs libnotify ncurses` pommy.c
 
+// pommy [session_time [break_time [extended_break_time]]]
+// e.g. pommy 30 5 15 (default = 25 5 20)
+
 // globals
 int timer[] = {2, 5, 0, 0};
 
@@ -24,7 +27,6 @@ int digit[] = {
 };
 
 int stop = 0;
-int redraw = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -45,6 +47,12 @@ void create_worker(pthread_t * ptp) {
   pthread_create(ptp, NULL, draw_worker, NULL);
 }
 
+void set_stop(int new) {
+  pthread_mutex_lock(&mutex);
+  stop = new;
+  pthread_mutex_unlock(&mutex);
+}
+
 
 int main(int argc, char ** argv) {
   // ncurses initialization
@@ -61,26 +69,33 @@ int main(int argc, char ** argv) {
 
   while(1) {
     switch(getch()) {
-    case 32: // space
-      pthread_mutex_lock(&mutex);
-      stop = stop ? 0 : 1;
-      pthread_mutex_unlock(&mutex);
 
-      if (stop == 0)
+    // space
+    case 32:
+      set_stop(!stop);
+
+      if (!stop)
         create_worker(&draw_thread);
 
       break;
-    case 113: // q
+
+    // q
+    case 113:
       goto leave;
       break;
-    case 410: // resize
-      // code
+
+    // resize
+    case 410:
+      set_stop(1);
+      pthread_join(draw_thread, NULL);
+      clear(); refresh();
+      set_stop(0);
+      create_worker(&draw_thread);
       break;
     }
   }
 
  leave:
-  // wrap up
   endwin();        // ncurses
   notify_uninit(); // libnotify
 
