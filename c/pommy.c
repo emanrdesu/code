@@ -28,6 +28,7 @@ char * timer_default[] = {"25", "5", "20"};
 
 int session = 1;
 int breakp = 0;
+int scale;
 
 int digit[] = {
   0x7B6F,
@@ -238,10 +239,12 @@ void draw_timer() {
   int scaleX = width / min_pretty_width(size);
   int scaleY = height / 5;
 
-  int scale = MIN(scaleX, scaleY);
+  int scaleYX = MIN(MIN(scaleX, scaleY), scale ? scale : 9999);
 
-  if(scale)
-    draw_timer_pretty(scale);
+  if(scale == 0) scale = scaleYX;
+
+  if(scaleYX)
+    draw_timer_pretty(scaleYX);
   else
     draw_timer_text();
 
@@ -358,6 +361,16 @@ int main(int argc, char ** argv) {
           increment_timer()
       );
 
+      break;
+
+    case '-':
+      atomic(scale = MAX(scale-1, 0));
+      clear(); redrawp = 1;
+      break;
+
+    case '=':
+      atomic(scale++);
+      clear(); redrawp = 1;
       break;
 
     case 'q':
