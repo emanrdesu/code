@@ -45,7 +45,7 @@ void * draw_worker(void * vargp) {
   while(1) {
     if(stopp) return NULL;
 
-    // draw digits
+    draw_timer();
     sleep(1);
     update_timer();
   }
@@ -89,15 +89,15 @@ int integerp(char * str) {
 
 int * get_timer(char * number) {
   int size = strlen(number) + 1 + 2;
-  int * digits = malloc(size * sizeof(int));
+  int * ret = malloc(size * sizeof(int));
 
-  digits[0] = size;
-  digits[size-2] = digits[size-2] = 0;
+  ret[0] = size;
+  ret[size-1] = ret[size-2] = 0;
 
-  for(int i = 1; i < size - 2; i++)
-    digits[i] = ctoi(number[i]);
+  for(int i = 0; i < size - 3; i++)
+    ret[i+1] = ctoi(number[i]);
 
-  return digits;
+  return ret;
 }
 
 
@@ -142,6 +142,16 @@ void update_timer() {
     else
       decrement(timer+1+(size-2), 2);
   }
+}
+
+
+void draw_timer() {
+  move(0, 0);
+
+  for(int i = 0; i < timer[0]; i++)
+    printw("%d", timer[i]);
+
+  refresh();
 }
 
 
