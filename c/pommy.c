@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <locale.h>
 #include <ncurses.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -19,6 +20,7 @@
 enum timer_t{SESSION, BREAK, EXTENDED};
 
 int  * timer;
+int  * drawnp;
 char * timer_default[] = {"25", "5", "20"};
 
 int session = 1;
@@ -28,7 +30,7 @@ int digit[] = {
   0x7B6F,
   0x2492,
   0x73E7,
-  0x7ECF,
+  0x73CF,
   0x5BC9,
   0x79CF,
   0x79EF,
@@ -38,12 +40,17 @@ int digit[] = {
 };
 
 int stopp = 0;
+int redrawp = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* procedures */
 
 void * draw_worker(void * vargp) {
   while(1) {
-    if(stopp) return NULL;
+    if(stopp) {
+      draw_timer();
+      return NULL;
+    }
 
     draw_timer();
     sleep(1);
@@ -61,20 +68,8 @@ void set_stopp(int new) {
   pthread_mutex_unlock(&mutex);
 }
 
-
 int ctoi(char c) {
-  switch(c) {
-  case '0': return 0; break;
-  case '1': return 1; break;
-  case '2': return 2; break;
-  case '3': return 3; break;
-  case '4': return 4; break;
-  case '5': return 5; break;
-  case '6': return 6; break;
-  case '7': return 7; break;
-  case '8': return 8; break;
-  case '9': return 9; break;
-  }
+  return c - 48;
 }
 
 int digitp(char c) {
@@ -145,12 +140,92 @@ void update_timer() {
 }
 
 
+void draw_timer_text() {
+  int size = timer[0];
+  int height, width;
+  getmaxyx(stdscr, height, width);
+
+  move(height / 2, (width - timer[0] - 1) / 2);
+
+  for(int i = 0 ; i < timer[0] - 2; i++)
+      printw("%d", (timer+1)[i]);
+
+  addch(':');
+  printw("%d", (timer+1)[size-2]);
+  printw("%d", (timer+1)[size-1]);
+}
+
+int minspace(int size) {
+  return size * (2 * 4) + 2;
+}
+
+void draw_cell(char * c, int scale, int y, int x) {
+  for(int cy = 0; cy < scale; cy++)
+    for(int cx = 0; cx < 2 * scale; cx++)
+      mvaddstr(y + cy, x + cx, c);
+}
+
+void draw_digit(int scale, int y, int x, int index) {
+  if(redrawp || drawnp[index] != (timer+1)[index]) {
+    drawnp[index] = (timer+1)[index];
+
+    int cellX, cellY, onp;
+    for(int cell = 0; cell < 15; cell++) {
+      cellX = x + ((cell % 3) * (2 * scale));
+      cellY = y + ((cell / 3) * scale);
+      onp = digit[drawnp[index]] & (1 << (14 - cell));
+
+      draw_cell(onp ? "█" : " ", scale, cellY, cellX);
+    }
+  }
+}
+
+void draw_colon(int scale, int y, int x) {
+  draw_cell("█", scale, y + scale, x);
+  draw_cell("█", scale, y + scale * 3, x);
+}
+
+void draw_timer_pretty(int scale) {
+  int size = timer[0];
+
+  int height, width;
+  getmaxyx(stdscr, height, width);
+
+  int timer_width = minspace(size) * scale;
+  int startX = (width - timer_width) / 2;
+  int startY = (height - (5 * scale)) / 2;
+
+  int i;
+  for(i = 0; i < size-2; i++)
+    draw_digit(scale, startY,
+               startX + (i * 2 * scale * 4 + 1), i);
+
+  startX += (i * 2 * scale * 4 + 1);
+  draw_colon(scale, startY, startX);
+  startX += (2 * scale * 2 + 1);
+
+  for(int i = 0; i < 2; i++)
+    draw_digit(scale, startY,
+               startX + (i * 2 * scale * 4 + 1), size-2+i);
+}
+
 void draw_timer() {
-  move(0, 0);
+  int size = timer[0];
 
-  for(int i = 0; i < timer[0]; i++)
-    printw("%d", (timer+1)[i]);
+  int height, width;
+  getmaxyx(stdscr, height, width);
 
+  int scaleX = width / minspace(size);
+  int scaleY = height / 5;
+
+  int scale = MIN(scaleX, scaleY);
+
+  if(scale)
+    draw_timer_pretty(scale);
+  else
+    draw_timer_text();
+
+  redrawp = 0;
   refresh();
 }
 
@@ -166,7 +241,7 @@ int main(int argc, char ** argv) {
 
   for(int i = 1; i < argc; i++)
     if(!integerp(argv[i])) {
-      fprintf(stderr, "Error: '%s' is not an integer\n", argv[i]);
+      fprintf(stderr, "Error: '%s' is not a positive integer\n", argv[i]);
       return 1;
     }
 
@@ -183,14 +258,22 @@ int main(int argc, char ** argv) {
   /* initialization */
 
   // ncurses
+  setlocale(LC_ALL, "");
   initscr();
   raw();
   noecho();
+  start_color();
+  init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
+  curs_set(0);
 
   // libnotify
   notify_init ("pommy");
 
   timer = get_timer(timer_default[SESSION]);
+  drawnp = malloc(timer[0] * sizeof(int));
+  for(int i = 0; i < timer[0]; i++)
+    drawnp[i] = -1;
+
   pthread_t draw_thread;
   create_worker(&draw_thread);
 
@@ -202,10 +285,15 @@ int main(int argc, char ** argv) {
 
     // space
     case 32:
+      attron(COLOR_PAIR(1));
+      redrawp = 1;
       set_stopp(!stopp);
 
-      if (!stopp)
+      if (!stopp) {
+        attroff(COLOR_PAIR(1));
+        redrawp = 1;
         create_worker(&draw_thread);
+      }
 
       break;
 
@@ -219,7 +307,9 @@ int main(int argc, char ** argv) {
       set_stopp(1);
       pthread_join(draw_thread, NULL);
       clear(); refresh();
+      usleep(500);
       set_stopp(0);
+      redrawp = 1;
       create_worker(&draw_thread);
       break;
     }
@@ -229,7 +319,7 @@ int main(int argc, char ** argv) {
  leave:
   set_stopp(1);
   pthread_join(draw_thread, NULL);
-  free(timer);
+  free(timer); free(drawnp);
 
   endwin();        // ncurses
   notify_uninit(); // libnotify
