@@ -14,7 +14,6 @@
 // pommy [session_time [break_time [extended_break_time]]]
 // e.g. pommy 30 5 15 (default = 25 5 20)
 
-
 /* globals */
 
 enum timer_t{SESSION, BREAK, EXTENDED};
@@ -48,7 +47,7 @@ void * draw_worker(void * vargp) {
 
     // draw digits
     sleep(1);
-    // decrement timer
+    update_timer();
   }
 }
 
@@ -99,6 +98,50 @@ int * get_timer(char * number) {
     digits[i] = ctoi(number[i]);
 
   return digits;
+}
+
+
+void decrement(int * number, int size) {
+  int i = size;
+
+  while(!number[--i])
+    number[i] = 9;
+
+  number[i] -= 1;
+}
+
+void update_timer() {
+  int size = timer[0] - 1;
+
+  int zerop = 1;
+  for(int i = 0; i < size; i++)
+    zerop = zerop && !timer[i+1];
+
+  if(zerop) {
+    if(breakp) {
+      session++; breakp = 0;
+
+      free(timer);
+      timer = get_timer(timer_default[SESSION]);
+    }
+    else {
+      breakp = 1;
+
+      free(timer);
+      int type = (session % 4) ? BREAK : EXTENDED;
+      timer = get_timer(timer_default[type]);
+    }
+  }
+  else {
+    if(!timer[size] && !timer[size-1]) {
+      timer[size] = 9;
+      timer[size-1] = 5;
+
+      decrement(timer+1, size - 2);
+    }
+    else
+      decrement(timer+1+(size-2), 2);
+  }
 }
 
 
