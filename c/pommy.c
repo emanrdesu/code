@@ -25,6 +25,7 @@ enum timer_t{SESSION, BREAK, EXTENDED};
 int  * timer;
 int  * drawnp;
 char * timer_default[] = {"25", "5", "20"};
+char * message[] = { NULL, NULL };
 
 int session = 1;
 int breakp = 0;
@@ -75,20 +76,26 @@ int min_pretty_width(int size) {
   return size * (2 * 4) + 2;
 }
 
+void notify(char * header, char * body) {
+  NotifyNotification * notification = notify_notification_new (header, body, "dialog-information");
+	notify_notification_show (notification, NULL);
+	g_object_unref(G_OBJECT(notification));
+}
+
 
 /* timer fiddling */
 
 int * create_timer(char * number) {
   int size = strlen(number) + 1 + 2;
-  int * ret = malloc(size * sizeof(int));
+  int * timer = malloc(size * sizeof(int));
 
-  ret[0] = --size;
-  (ret+1)[size-1] = (ret+1)[size-2] = 0;
+  timer[0] = --size;
+  (timer+1)[size-1] = (timer+1)[size-2] = 0;
 
   for(int i = 0; i < (size-2); i++)
-    (ret+1)[i] = ctoi(number[i]);
+    (timer+1)[i] = ctoi(number[i]);
 
-  return ret;
+  return timer;
 }
 
 void decrement(int * number, int size) {
@@ -148,11 +155,19 @@ void update_timer() {
 
       free(timer);
       timer = create_timer(timer_default[SESSION]);
+
+      sprintf(message[0], "%s min", timer_default[SESSION]);
+      notify("Begin Session", message[0]);
     }
     else {
       breakp = 1;
       free(timer);
       int type = (session % 4) ? BREAK : EXTENDED;
+
+      sprintf(message[0], "Begin%s Break", type == BREAK ? "" : " Extended");
+      sprintf(message[1], "%s min", timer_default[type]);
+      notify(message[0], message[1]);
+
       timer = create_timer(timer_default[type]);
     }
   }
@@ -302,6 +317,9 @@ int main(int argc, char ** argv) {
 
   /* initialization */
 
+  message[0] = malloc(50);
+  message[1] = malloc(50);
+
   // ncurses
   setlocale(LC_ALL, "");
   initscr();
@@ -313,6 +331,9 @@ int main(int argc, char ** argv) {
 
   // libnotify
   notify_init ("pommy");
+
+  sprintf(message[0], "%s min", timer_default[SESSION]);
+  notify("Begin Session", message[0]);
 
   timer = create_timer(timer_default[SESSION]);
   drawnp = malloc(timer[0] * sizeof(int));
@@ -393,7 +414,9 @@ int main(int argc, char ** argv) {
  leave:
   set_stop(1);
   pthread_join(draw_thread, NULL);
+
   free(timer); free(drawnp);
+  free(message[0]); free(message[1]);
 
   endwin();        // ncurses
   notify_uninit(); // libnotify
