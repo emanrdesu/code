@@ -6,6 +6,8 @@
 #include <string.h>
 #include <libnotify/notify.h>
 
+#define atomic(x) pthread_mutex_lock(&mutex); x; pthread_mutex_unlock(&mutex)
+
 // pommy is a pomodoro technique ncurses program
 // displays ascii timer, allows pausing
 
@@ -63,9 +65,7 @@ void create_worker(pthread_t * ptp) {
 }
 
 void set_stopp(int new) {
-  pthread_mutex_lock(&mutex);
-  stopp = new;
-  pthread_mutex_unlock(&mutex);
+  atomic(stopp = new);
 }
 
 int ctoi(char c) {
@@ -103,7 +103,40 @@ void decrement(int * number, int size) {
   while(!number[i] && i>=0)
     number[i--] = 9;
 
-  number[i] -= 1;
+  number[i]--;
+}
+
+void decrement_timer() {
+  int size = timer[0];
+
+  if(!(timer+1)[size-1] && !(timer+1)[size-2]) {
+    (timer+1)[size-2] = 5;
+    (timer+1)[size-1] = 9;
+
+    decrement(timer+1, size-2);
+  }
+  else
+    decrement(timer+1+(size-2), 2);
+}
+
+void increment(int * number, int size) {
+  int i = size - 1;
+  while(number[i] == 9 && i>=0)
+    number[i--] = 0;
+
+  number[i]++;
+}
+
+void increment_timer() {
+  int size = timer[0];
+
+  if((timer+1)[size-2] == 5 && (timer+1)[size-1] == 9) {
+    (timer+1)[size-2] = (timer+1)[size-1] = 0;
+
+    increment(timer+1, size-2);
+  }
+  else
+    increment(timer+1+(size-2), 2);
 }
 
 void update_timer() {
@@ -112,6 +145,8 @@ void update_timer() {
   int zerop = 1;
   for(int i = 0; i < size; i++)
     zerop = zerop && !(timer+1)[i];
+
+  pthread_mutex_lock(&mutex);
 
   if(zerop) {
     if(breakp) {
@@ -127,16 +162,10 @@ void update_timer() {
       timer = get_timer(timer_default[type]);
     }
   }
-  else {
-    if(!(timer+1)[size-1] && !(timer+1)[size-2]) {
-      (timer+1)[size-1] = 9;
-      (timer+1)[size-2] = 5;
+  else
+    decrement_timer();
 
-      decrement(timer+1, size-2);
-    }
-    else
-      decrement(timer+1+(size-2), 2);
-  }
+  pthread_mutex_unlock(&mutex);
 }
 
 
@@ -283,8 +312,7 @@ int main(int argc, char ** argv) {
   while(1) {
     switch(getch()) {
 
-    // space
-    case 32:
+    case ' ':
       attron(COLOR_PAIR(1));
       redrawp = 1;
       set_stopp(!stopp);
@@ -297,8 +325,31 @@ int main(int argc, char ** argv) {
 
       break;
 
-    // q
-    case 113:
+    case 'j':
+      atomic(decrement_timer());
+      break;
+
+    case 'J':
+      atomic (
+        for(int i = 0; i < 60; i++)
+          decrement_timer()
+      );
+
+      break;
+
+    case 'k':
+      atomic(increment_timer());
+      break;
+
+    case 'K':
+      atomic(
+        for(int i = 0; i < 60; i++)
+          increment_timer()
+      );
+
+      break;
+
+    case 'q':
       goto leave;
       break;
 
