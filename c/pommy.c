@@ -9,7 +9,7 @@
 #define atomic(x) pthread_mutex_lock(&mutex); x; pthread_mutex_unlock(&mutex)
 
 // pommy is a pomodoro technique ncurses program
-// displays ascii timer, allows pausing
+// displays ascii timer, allows interaction with timer
 
 // compile command:
 // gcc -o pommy `pkg-config --cflags --libs libnotify ncurses` pommy.c
@@ -17,7 +17,8 @@
 // pommy [session_time [break_time [extended_break_time]]]
 // e.g. pommy 30 5 15 (default = 25 5 20)
 
-/* globals */
+
+/* GLOBALS */
 
 enum timer_t{SESSION, BREAK, EXTENDED};
 
@@ -45,26 +46,12 @@ int stopp = 0;
 int redrawp = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-/* procedures */
 
-void * draw_worker(void * vargp) {
-  while(1) {
-    if(stopp) {
-      draw_timer();
-      return NULL;
-    }
+/* PROCEDURES */
 
-    draw_timer();
-    sleep(1);
-    update_timer();
-  }
-}
+/* utility */
 
-void create_worker(pthread_t * ptp) {
-  pthread_create(ptp, NULL, draw_worker, NULL);
-}
-
-void set_stopp(int new) {
+void set_stop(int new) {
   atomic(stopp = new);
 }
 
@@ -83,7 +70,14 @@ int integerp(char * str) {
   return 1;
 }
 
-int * get_timer(char * number) {
+int min_pretty_width(int size) {
+  return size * (2 * 4) + 2;
+}
+
+
+/* timer fiddling */
+
+int * create_timer(char * number) {
   int size = strlen(number) + 1 + 2;
   int * ret = malloc(size * sizeof(int));
 
@@ -95,7 +89,6 @@ int * get_timer(char * number) {
 
   return ret;
 }
-
 
 void decrement(int * number, int size) {
   int i = size - 1;
@@ -153,13 +146,13 @@ void update_timer() {
       session++; breakp = 0;
 
       free(timer);
-      timer = get_timer(timer_default[SESSION]);
+      timer = create_timer(timer_default[SESSION]);
     }
     else {
       breakp = 1;
       free(timer);
       int type = (session % 4) ? BREAK : EXTENDED;
-      timer = get_timer(timer_default[type]);
+      timer = create_timer(timer_default[type]);
     }
   }
   else
@@ -168,6 +161,8 @@ void update_timer() {
   pthread_mutex_unlock(&mutex);
 }
 
+
+/* drawing procedures */
 
 void draw_timer_text() {
   int size = timer[0];
@@ -182,10 +177,6 @@ void draw_timer_text() {
   addch(':');
   printw("%d", (timer+1)[size-2]);
   printw("%d", (timer+1)[size-1]);
-}
-
-int minspace(int size) {
-  return size * (2 * 4) + 2;
 }
 
 void draw_cell(char * c, int scale, int y, int x) {
@@ -220,7 +211,7 @@ void draw_timer_pretty(int scale) {
   int height, width;
   getmaxyx(stdscr, height, width);
 
-  int timer_width = minspace(size) * scale;
+  int timer_width = min_pretty_width(size) * scale;
   int startX = (width - timer_width) / 2;
   int startY = (height - (5 * scale)) / 2;
 
@@ -244,7 +235,7 @@ void draw_timer() {
   int height, width;
   getmaxyx(stdscr, height, width);
 
-  int scaleX = width / minspace(size);
+  int scaleX = width / min_pretty_width(size);
   int scaleY = height / 5;
 
   int scale = MIN(scaleX, scaleY);
@@ -258,6 +249,28 @@ void draw_timer() {
   refresh();
 }
 
+void * draw_worker(void * vargp) {
+  redrawp = 1;
+
+  while(1) {
+    if(stopp) {
+      redrawp = 1;
+      draw_timer();
+      return NULL;
+    }
+
+    draw_timer();
+    sleep(1);
+    update_timer();
+  }
+}
+
+void create_worker(pthread_t * ptp) {
+  pthread_create(ptp, NULL, draw_worker, NULL);
+}
+
+
+/* MAIN */
 
 int main(int argc, char ** argv) {
 
@@ -298,7 +311,7 @@ int main(int argc, char ** argv) {
   // libnotify
   notify_init ("pommy");
 
-  timer = get_timer(timer_default[SESSION]);
+  timer = create_timer(timer_default[SESSION]);
   drawnp = malloc(timer[0] * sizeof(int));
   for(int i = 0; i < timer[0]; i++)
     drawnp[i] = -1;
@@ -314,12 +327,10 @@ int main(int argc, char ** argv) {
 
     case ' ':
       attron(COLOR_PAIR(1));
-      redrawp = 1;
-      set_stopp(!stopp);
+      set_stop(!stopp);
 
       if (!stopp) {
         attroff(COLOR_PAIR(1));
-        redrawp = 1;
         create_worker(&draw_thread);
       }
 
@@ -355,12 +366,11 @@ int main(int argc, char ** argv) {
 
     // resize
     case 410:
-      set_stopp(1);
+      set_stop(1);
       pthread_join(draw_thread, NULL);
-      clear(); refresh();
+      clear();
       usleep(500);
-      set_stopp(0);
-      redrawp = 1;
+      set_stop(0);
       create_worker(&draw_thread);
       break;
     }
@@ -368,7 +378,7 @@ int main(int argc, char ** argv) {
 
 
  leave:
-  set_stopp(1);
+  set_stop(1);
   pthread_join(draw_thread, NULL);
   free(timer); free(drawnp);
 
