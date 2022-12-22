@@ -5,18 +5,25 @@
 #include <string.h>
 #include <libnotify/notify.h>
 
+// pommy is a pomodoro technique ncurses program
+// displays ascii timer, allows pausing
+
 // compile command:
 // gcc -o pommy `pkg-config --cflags --libs libnotify ncurses` pommy.c
 
 // pommy [session_time [break_time [extended_break_time]]]
 // e.g. pommy 30 5 15 (default = 25 5 20)
 
-// globals
+
+/* globals */
 
 enum timer_t{SESSION, BREAK, EXTENDED};
 
 int  * timer;
 char * timer_default[] = {"25", "5", "20"};
+
+int session = 1;
+int breakp = 0;
 
 int digit[] = {
   0x7B6F,
@@ -31,13 +38,13 @@ int digit[] = {
   0x7BC9
 };
 
-int stop = 0;
+int stopp = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 void * draw_worker(void * vargp) {
   while(1) {
-    if(stop) return NULL;
+    if(stopp) return NULL;
 
     // draw digits
     sleep(1);
@@ -49,9 +56,9 @@ void create_worker(pthread_t * ptp) {
   pthread_create(ptp, NULL, draw_worker, NULL);
 }
 
-void set_stop(int new) {
+void set_stopp(int new) {
   pthread_mutex_lock(&mutex);
-  stop = new;
+  stopp = new;
   pthread_mutex_unlock(&mutex);
 }
 
@@ -81,13 +88,14 @@ int integerp(char * str) {
   return 1;
 }
 
-int * get_digits(char * number) {
-  int size = strlen(number) + 1;
+int * get_timer(char * number) {
+  int size = strlen(number) + 1 + 2;
   int * digits = malloc(size * sizeof(int));
 
   digits[0] = size;
+  digits[size-2] = digits[size-2] = 0;
 
-  for(int i = 1; i < size; i++)
+  for(int i = 1; i < size - 2; i++)
     digits[i] = ctoi(number[i]);
 
   return digits;
@@ -96,7 +104,7 @@ int * get_digits(char * number) {
 
 int main(int argc, char ** argv) {
 
-  // command line processing
+  /* command line processing */
 
   if(argc > 4) {
     fprintf(stderr, "Error: pommy takes 3 arguments max.\n");
@@ -119,7 +127,12 @@ int main(int argc, char ** argv) {
     timer_default[EXTENDED] = argv[3];
 
 
-  // initialization
+  /* initialization */
+
+  timer = get_timer(timer_default[SESSION]);
+  pthread_t draw_thread;
+  create_worker(&draw_thread);
+
   // ncurses
   initscr();
   raw();
@@ -129,17 +142,16 @@ int main(int argc, char ** argv) {
   notify_init ("pommy");
 
 
-  pthread_t draw_thread;
-  create_worker(&draw_thread);
+  /* main event loop */
 
   while(1) {
     switch(getch()) {
 
     // space
     case 32:
-      set_stop(!stop);
+      set_stopp(!stopp);
 
-      if (!stop)
+      if (!stopp)
         create_worker(&draw_thread);
 
       break;
@@ -151,16 +163,21 @@ int main(int argc, char ** argv) {
 
     // resize
     case 410:
-      set_stop(1);
+      set_stopp(1);
       pthread_join(draw_thread, NULL);
       clear(); refresh();
-      set_stop(0);
+      set_stopp(0);
       create_worker(&draw_thread);
       break;
     }
   }
 
+
  leave:
+  set_stopp(1);
+  pthread_join(draw_thread, NULL);
+  free(timer);
+
   endwin();        // ncurses
   notify_uninit(); // libnotify
 
