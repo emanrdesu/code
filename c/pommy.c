@@ -98,6 +98,14 @@ int * create_timer(char * number) {
   return timer;
 }
 
+int timer_finishedp() {
+  int zerop = 1;
+  for(int i = 0; i < timer[0]; i++)
+    zerop = zerop && !(timer+1)[i];
+
+  return zerop;
+}
+
 void decrement(int * number, int size) {
   int i = size - 1;
 
@@ -109,6 +117,8 @@ void decrement(int * number, int size) {
 
 void decrement_timer() {
   int size = timer[0];
+
+  if(timer_finishedp()) return;
 
   if(!(timer+1)[size-1] && !(timer+1)[size-2]) {
     (timer+1)[size-2] = 5;
@@ -143,37 +153,35 @@ void increment_timer() {
 void update_timer() {
   int size = timer[0];
 
-  int zerop = 1;
-  for(int i = 0; i < size; i++)
-    zerop = zerop && !(timer+1)[i];
-
   pthread_mutex_lock(&mutex);
 
-  if(zerop) {
-    if(breakp) {
-      session++; breakp = 0;
-
-      free(timer);
-      timer = create_timer(timer_default[SESSION]);
-
-      sprintf(message[0], "%s min", timer_default[SESSION]);
-      notify("Begin Session", message[0]);
-    }
-    else {
-      breakp = 1;
-      free(timer);
-      int type = (session % 4) ? BREAK : EXTENDED;
-
-      sprintf(message[0], "Begin%s Break", type == BREAK ? "" : " Extended");
-      sprintf(message[1], "%s min", timer_default[type]);
-      notify(message[0], message[1]);
-
-      timer = create_timer(timer_default[type]);
-    }
-  }
-  else
+  if(!timer_finishedp()) {
     decrement_timer();
+    goto unlock;
+  }
 
+  if(breakp) {
+    session++; breakp = 0;
+
+    free(timer);
+    timer = create_timer(timer_default[SESSION]);
+
+    sprintf(message[0], "%s min", timer_default[SESSION]);
+    notify("Begin Session", message[0]);
+  }
+  else {
+    breakp = 1;
+    free(timer);
+    int type = (session % 4) ? BREAK : EXTENDED;
+
+    sprintf(message[0], "Begin%s Break", type == BREAK ? "" : " Extended");
+    sprintf(message[1], "%s min", timer_default[type]);
+    notify(message[0], message[1]);
+
+    timer = create_timer(timer_default[type]);
+  }
+
+ unlock:
   pthread_mutex_unlock(&mutex);
 }
 
