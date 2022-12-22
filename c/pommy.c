@@ -29,7 +29,9 @@ char * message[] = { NULL, NULL };
 
 int session = 1;
 int breakp = 0;
+
 int scale;
+int scale_max;
 
 int digit[] = {
   0x7B6F,
@@ -262,9 +264,10 @@ void draw_timer() {
   int scaleX = width / min_pretty_width(size);
   int scaleY = height / 5;
 
-  int scaleYX = MIN(MIN(scaleX, scaleY), scale ? scale : 9999);
-
-  if(scale == 0) scale = scaleYX;
+  int scaleYX = MIN(scaleX, scaleY);
+  scale_max = scaleYX;
+  if(scale == 0) scale = scaleYX / 2;
+  scaleYX = MIN(scaleYX, scale);
 
   if(scaleYX)
     draw_timer_pretty(scaleYX);
@@ -398,7 +401,7 @@ int main(int argc, char ** argv) {
       break;
 
     case '=':
-      atomic(scale++);
+      atomic(scale = MIN(scale+1, scale_max));
       clear(); redrawp = 1;
       break;
 
