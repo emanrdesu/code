@@ -64,6 +64,7 @@ void set_stopp(int new) {
 
 int ctoi(char c) {
   switch(c) {
+  case '0': return 0; break;
   case '1': return 1; break;
   case '2': return 2; break;
   case '3': return 3; break;
@@ -91,31 +92,31 @@ int * get_timer(char * number) {
   int size = strlen(number) + 1 + 2;
   int * ret = malloc(size * sizeof(int));
 
-  ret[0] = size;
-  ret[size-1] = ret[size-2] = 0;
+  ret[0] = --size;
+  (ret+1)[size-1] = (ret+1)[size-2] = 0;
 
-  for(int i = 0; i < size - 3; i++)
-    ret[i+1] = ctoi(number[i]);
+  for(int i = 0; i < (size-2); i++)
+    (ret+1)[i] = ctoi(number[i]);
 
   return ret;
 }
 
 
 void decrement(int * number, int size) {
-  int i = size;
+  int i = size - 1;
 
-  while(!number[--i])
-    number[i] = 9;
+  while(!number[i] && i>=0)
+    number[i--] = 9;
 
   number[i] -= 1;
 }
 
 void update_timer() {
-  int size = timer[0] - 1;
+  int size = timer[0];
 
   int zerop = 1;
   for(int i = 0; i < size; i++)
-    zerop = zerop && !timer[i+1];
+    zerop = zerop && !(timer+1)[i];
 
   if(zerop) {
     if(breakp) {
@@ -126,18 +127,17 @@ void update_timer() {
     }
     else {
       breakp = 1;
-
       free(timer);
       int type = (session % 4) ? BREAK : EXTENDED;
       timer = get_timer(timer_default[type]);
     }
   }
   else {
-    if(!timer[size] && !timer[size-1]) {
-      timer[size] = 9;
-      timer[size-1] = 5;
+    if(!(timer+1)[size-1] && !(timer+1)[size-2]) {
+      (timer+1)[size-1] = 9;
+      (timer+1)[size-2] = 5;
 
-      decrement(timer+1, size - 2);
+      decrement(timer+1, size-2);
     }
     else
       decrement(timer+1+(size-2), 2);
@@ -149,7 +149,7 @@ void draw_timer() {
   move(0, 0);
 
   for(int i = 0; i < timer[0]; i++)
-    printw("%d", timer[i]);
+    printw("%d", (timer+1)[i]);
 
   refresh();
 }
@@ -182,10 +182,6 @@ int main(int argc, char ** argv) {
 
   /* initialization */
 
-  timer = get_timer(timer_default[SESSION]);
-  pthread_t draw_thread;
-  create_worker(&draw_thread);
-
   // ncurses
   initscr();
   raw();
@@ -193,6 +189,10 @@ int main(int argc, char ** argv) {
 
   // libnotify
   notify_init ("pommy");
+
+  timer = get_timer(timer_default[SESSION]);
+  pthread_t draw_thread;
+  create_worker(&draw_thread);
 
 
   /* main event loop */
