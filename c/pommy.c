@@ -247,7 +247,7 @@ void draw_timer_pretty(int scale) {
                startX + (i * 2 * scale * 4 + 1), i);
 
   startX += (i * 2 * scale * 4 + 1);
-  draw_colon(scale, startY, startX);
+  draw_colon(scale, startY, startX + 1);
   startX += (2 * scale * 2 + 1);
 
   for(int i = 0; i < 2; i++)
@@ -375,24 +375,8 @@ int main(int argc, char ** argv) {
       atomic(decrement_timer());
       break;
 
-    case 'J':
-      atomic (
-        for(int i = 0; i < 60; i++)
-          decrement_timer()
-      );
-
-      break;
-
     case 'k':
       atomic(increment_timer());
-      break;
-
-    case 'K':
-      atomic(
-        for(int i = 0; i < 60; i++)
-          increment_timer()
-      );
-
       break;
 
     case '-':
