@@ -11,6 +11,11 @@
 // pommy is a pomodoro technique ncurses program
 // displays ascii timer, allows interaction with timer
 
+// interact keys:
+// j (decrement timer), k (increment timer),
+// - (decrease timer size), = (decrease timer size)
+// space (pause/unpause timer), q (quit)
+
 // compile command:
 // gcc -o pommy `pkg-config --cflags --libs libnotify ncurses` pommy.c
 
@@ -22,16 +27,14 @@
 
 enum timer_t{SESSION, BREAK, EXTENDED};
 
-int  * timer;
-int  * drawnp;
+int  * timer, * drawnp;
 char * timer_default[] = {"25", "5", "20"};
 char * message[] = { NULL, NULL };
 
 int session = 1;
 int breakp = 0;
 
-int scale;
-int scale_max;
+int scale, scale_max;
 
 int digit[] = {
   0x7B6F,
