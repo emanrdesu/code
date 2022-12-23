@@ -167,6 +167,7 @@ void update_timer() {
 
     free(timer);
     timer = create_timer(timer_default[SESSION]);
+    redrawp = 1; clear();
 
     sprintf(message[0], "%s min", timer_default[SESSION]);
     notify("Begin Session", message[0]);
@@ -181,6 +182,7 @@ void update_timer() {
     notify(message[0], message[1]);
 
     timer = create_timer(timer_default[type]);
+    redrawp = 1; clear();
   }
 
  unlock:
