@@ -195,9 +195,9 @@ void draw_timer_text() {
   int height, width;
   getmaxyx(stdscr, height, width);
 
-  move(height / 2, (width - timer[0] - 1) / 2);
+  move(height / 2, (width - size - 1) / 2);
 
-  for(int i = 0 ; i < timer[0] - 2; i++)
+  for(int i = 0 ; i < (size - 2); i++)
       printw("%d", (timer+1)[i]);
 
   addch(':');
@@ -215,13 +215,13 @@ void draw_digit(int scale, int y, int x, int index) {
   if(redrawp || drawnp[index] != (timer+1)[index]) {
     drawnp[index] = (timer+1)[index];
 
-    int cellX, cellY, onp;
+    int cellX, cellY, drawp;
     for(int cell = 0; cell < 15; cell++) {
       cellX = x + ((cell % 3) * (2 * scale));
       cellY = y + ((cell / 3) * scale);
-      onp = digit[drawnp[index]] & (1 << (14 - cell));
+      drawp = digit[drawnp[index]] & (1 << (14 - cell));
 
-      draw_cell(onp ? "█" : " ", scale, cellY, cellX);
+      draw_cell(drawp ? "█" : " ", scale, cellY, cellX);
     }
   }
 }
