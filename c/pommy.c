@@ -336,8 +336,6 @@ int main(int argc, char ** argv) {
   initscr();
   raw();
   noecho();
-  start_color();
-  init_pair(1, COLOR_MAGENTA, COLOR_BLACK);
   curs_set(0);
 
   // libnotify
@@ -361,13 +359,10 @@ int main(int argc, char ** argv) {
     switch(getch()) {
 
     case ' ':
-      attron(COLOR_PAIR(1));
       set_stop(!stopp);
 
-      if (!stopp) {
-        attroff(COLOR_PAIR(1));
+      if (!stopp)
         create_worker(&draw_thread);
-      }
 
       break;
 
