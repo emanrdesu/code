@@ -9,7 +9,7 @@
 #define atomic(x) pthread_mutex_lock(&mutex); x; pthread_mutex_unlock(&mutex)
 
 // pommy is a pomodoro technique ncurses program
-// displays ascii timer, allows interaction with timer
+// displays pretty digits, allows interaction with timer
 
 // interact keys:
 // j (decrement timer), k (increment timer),
