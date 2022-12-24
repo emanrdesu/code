@@ -83,8 +83,8 @@ int min_pretty_width(int size) {
 
 void notify(char * header, char * body) {
   NotifyNotification * notification = notify_notification_new (header, body, "dialog-information");
-	notify_notification_show (notification, NULL);
-	g_object_unref(G_OBJECT(notification));
+  notify_notification_show (notification, NULL);
+  g_object_unref(G_OBJECT(notification));
 }
 
 
