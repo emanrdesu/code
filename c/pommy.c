@@ -243,7 +243,7 @@ void draw_timer_pretty(int scale) {
   getmaxyx(stdscr, height, width);
 
   int timer_width = min_pretty_width(size) * scale;
-  int startX = (width - timer_width) / 2;
+  int startX = (width - timer_width) / 2 - scale;
   int startY = (height - (5 * scale)) / 2;
 
   int i;
