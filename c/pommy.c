@@ -416,5 +416,5 @@ int main(int argc, char ** argv) {
   endwin();        // ncurses
   notify_uninit(); // libnotify
 
-	return 0;
+  return 0;
 }
