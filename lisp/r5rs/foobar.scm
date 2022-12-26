@@ -14,15 +14,14 @@
          adder succ pred
 
          ;; FUNCTIONS
-         curry curyr
+         Y curry curyr
          flip tuply arged unary zary
-         compose compose * ○ ○*
+         compose compose * ○ ○* pipe pipe*
          opp
          valued listed listed*
          conjoin disjoin orid conorid dis con
          call key sargs unthunk
-         fx.fy gx.fx x.fx fx.x f..x
-         !id Y
+         fx.fy gx.fx x.fx fx.x f..x !id
 
          ;; LIST
          singleton? length=?
@@ -212,6 +211,11 @@
 
 ;; FUNCTIONS
 
+(define (Y f)
+  ((lambda (g) (g g))
+   (lambda (g)
+     (f (lambda x (apply (g g) x))))))
+
 (define (curry f . args)
   (lambda rest (apply f (append args rest))))
 
@@ -241,12 +245,13 @@
                 (apply f (values->list (apply g x))))))
 
         (compose-factory
-         (lambda (f)
-           (lambda fs
-             (cond ((null? fs) id)
-                   ((null? (cdr fs)) (car fs))
-                   (else
-                    (f (car fs) (apply compose (cdr fs)))))))))
+         (Y (lambda (self)
+              (lambda (f)
+                (lambda fs
+                  (cond ((null? fs) id)
+                        ((null? (cdr fs)) (car fs))
+                        (else
+                         (f (car fs) (apply (self f) (cdr fs)))))))))))
 
     (values (compose-factory ○)
             (compose-factory ○*))))
@@ -254,6 +259,8 @@
 
 (define ○ compose)
 (define ○* compose*)
+(define pipe (flip compose))
+(define pipe* (flip compose*))
 
 (define opp (curry ○ not))
 
@@ -322,12 +329,6 @@
 
 (define (!id p)
   (lambda x (begin (apply p x) (apply values x))))
-
-
-(define (Y f)
-  ((lambda (g) (g g))
-   (lambda (g)
-     (f (lambda x (apply (g g) x))))))
 
 
 ;; LIST
@@ -639,15 +640,15 @@
   (for-each displayln xs))
 
 (define explode
-  (○ (curry map string->symbol)
-     (curry map string)
-     string->list
-     symbol->string))
+  (pipe symbol->string
+        string->list
+        (curry map string)
+        (curry map string->symbol)))
 
 (define implode
-  (○ string->symbol
-     (tuply string-append)
-     (curry map symbol->string)))
+  (pipe (curry map symbol->string)
+        (tuply string-append)
+        string->symbol))
 
 (define symbol-reverse
   (○ implode reverse explode))
