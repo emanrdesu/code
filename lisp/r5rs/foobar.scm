@@ -15,12 +15,13 @@
 
          ;; FUNCTIONS
          Y curry curyr
-         flip tuply arged unary zary
+         flip tuply arged
+         zary nary unary sargs
          compose compose * ○ ○* pipe pipe*
          opp
          valued listed listed*
          conjoin disjoin orid conorid dis con
-         call key sargs unthunk
+         call key unthunk
          fx.fy gx.fx x.fx fx.x f..x !id
 
          ;; LIST
@@ -216,6 +217,7 @@
    (lambda (g)
      (f (lambda x (apply (g g) x))))))
 
+
 (define (curry f . args)
   (lambda rest (apply f (append args rest))))
 
@@ -231,11 +233,21 @@
 (define (arged f)
   (lambda args (f args)))
 
-(define (unary f)
-  (lambda x (f (car x))))
 
 (define (zary f)
   (thunk (f)))
+
+(define (nary n f)
+  (lambda x (apply f (take n x))))
+
+(define unary (curry nary 1))
+
+(define (sargs f . n)
+  (lambda args
+    (apply f
+           (map (curyr call args)
+                (map (curry curyr list-ref) n)))))
+
 
 (define-values (compose compose*)
   (let ((○ (lambda (f g)
@@ -302,12 +314,6 @@
 
 (define (key f g)
   (lambda args (apply f (map g args))))
-
-(define (sargs f . n)
-  (lambda args
-    (apply f
-      (map (curyr call args)
-        (map (curry curyr list-ref) n)))))
 
 (define (unthunk thunk)
   (lambda ignore (thunk)))
