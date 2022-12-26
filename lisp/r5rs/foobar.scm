@@ -244,7 +244,7 @@
               (lambda x
                 (apply f (values->list (apply g x))))))
 
-        (compose-factory
+        (compose-with
          (Y (lambda (self)
               (lambda (f)
                 (lambda fs
@@ -253,8 +253,8 @@
                         (else
                          (f (car fs) (apply (self f) (cdr fs)))))))))))
 
-    (values (compose-factory ○)
-            (compose-factory ○*))))
+    (values (compose-with ○)
+            (compose-with ○*))))
 
 
 (define ○ compose)
