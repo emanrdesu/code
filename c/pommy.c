@@ -13,7 +13,7 @@
 
 // interact keys:
 // j (decrement timer), k (increment timer),
-// - (decrease timer size), = (decrease timer size)
+// - (decrease timer size), = (increase timer size)
 // space (pause/unpause timer), q (quit)
 
 // compile command:
