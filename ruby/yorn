@@ -113,9 +113,7 @@ class Hash
 end
 
 class Time
-  def box
-    ''
-  end
+  def box() '' end
 
   def path(x)
     # only first 5 elements are relevant (m,h,d,mon,y)
@@ -151,12 +149,6 @@ class Array
   end
 end
 
-class Symbol
-  def +(symbol)
-    (self.to_s + symbol.to_s).to_sym
-  end
-end
-
 class Object
   def when(n = self)
     (n === self) and yield self ; self
@@ -185,7 +177,7 @@ class Yornal
 
   ## class methods
 
-  def Yornal.dotYornalNew(message)
+  def Yornal.dotYornalEdit(message)
     File.write(
       $dotyornal,
       Yornal.list.tap { |h| yield h }
@@ -209,20 +201,20 @@ class Yornal
       name =~ regex and exitError("name cannot " + errorMessage)
     end
 
-    Yornal.list.find {|n,t| n == name} and exitError("yornal '#{name}' already exists")
+    Yornal.list.find {|n,_| n == name} and exitError("yornal '#{name}' already exists")
 
     [ $yornalPath, name ].jomp('/')
       .tap(&method(type == :box ? :touch : :mkdir))
       .then { |f| git(:add, f) if type == :box }
 
     message = "Create #{type} yornal '#{name}'"
-    Yornal.dotYornalNew(message) do |h|
+    Yornal.dotYornalEdit(message) do |h|
       h[name] = type
     end
   end
 
   def Yornal.delete(name, ask=true)
-    Yornal.list.find { |n,t| n == name } or exitError("'#{name}' yornal doesn't exist")
+    Yornal.list.find { |n,_| n == name } or exitError("'#{name}' yornal doesn't exist")
     pre = "You are about to delete yornal '#{name}'."
     question = "Are you sure you want to delete it?"
     if (!ask || yes_or_no?(question, pre))
@@ -230,7 +222,7 @@ class Yornal
     end
 
     message = "Delete #{name} yornal"
-    Yornal.dotYornalNew(message) do |h|
+    Yornal.dotYornalEdit(message) do |h|
       h.delete name
     end
 
@@ -291,7 +283,7 @@ class Yornal
     dateStructure = [:year, :month, :day, :hour, :min]
     datehash = -> x { x.zip(dateStructure).to_h.flip }
 
-    tree(path()).filter do |path|
+    tree(path).filter do |path|
       entry = path[$yornalPath.size + @name.size + 1 ..]
       unless entry.split('/').join =~ /\D/ # remove nested yornals
         entryHash = datehash.(entry.stlip('/'))
@@ -324,7 +316,7 @@ end
 
 class Entry
   include Comparable
-  attr_reader :pdate, :yornal # pseudo date, yornal (obj or name)
+  attr_reader :date, :yornal # pseudo date, yornal (obj or name)
 
   def <=>(x)
     to_t() <=> ((x.is_a? Entry) ? x.to_t : x)
@@ -365,10 +357,10 @@ class Entry
   end
 
   def edit(editor=editor(), action=:Modify, ignore=nil)
-    digest = SHA256.digest(File.read(path()))
+    digest = SHA256.digest(File.read(path))
     system "#{editor} #{path}"
-    unless ignore || digest == SHA256.digest(File.read(path()))
-      git(:add, path())
+    unless ignore || digest == SHA256.digest(File.read(path))
+      git(:add, path)
       git(:commit, "-m '#{action} #{@yornal.name} entry #{@date}'")
     end
   end
@@ -447,7 +439,7 @@ class Parse
     [:minute, "min", "minute"]
   ]
 
-  def Parse.entrySpecHelper(argument, entries)
+  def Parse.entrySpecBase(argument, entries)
     location, *operands = argument.split(/[\+\-]/)
     ops = argument.scan(/[\+\-]/)
 
@@ -462,8 +454,8 @@ class Parse
     end
   end
 
-  def Parse.editFlag(argument, entries) # => Time
-    Parse.entrySpecHelper(argument, entries) do |*vars|
+  def Parse.editFlag(argument, entries) # Time
+    Parse.entrySpecBase(argument, entries) do |*vars|
       location, operands, ops, locator = vars
 
       expr = operands.take_while(&:integer?).zip(ops).map(&:reverse)
@@ -482,7 +474,7 @@ class Parse
   end
 
   def Parse.entrySpec(argument, entries) # Time
-    Parse.entrySpecHelper(argument, entries) do |*vars|
+    Parse.entrySpecBase(argument, entries) do |*vars|
       location, operands, ops, locator = vars
 
       operands.all? &:integer? or exitError("invalid argument '#{argument}'")
@@ -540,7 +532,7 @@ class Validate
 
   def Validate.entryLiteral(argument)
     fields = argument.split('/')
-    fields.all? &:integer? or exitError "malformed entry literal"
+    fields.all?(&:integer?) or exitError "malformed entry literal"
     (fields.size <= 6) or  exitError "only 6 datetime fields can be specified max"
     fields.map(&:to_i).all? { |i| i >= 0} or exitError "negative numbers not allowed"
   end
@@ -837,13 +829,13 @@ die {
 
 
 $yornalName = ARGV[0]
-(Yornal.report ; die) if ($given.empty? && !$yornalName)
+(Yornal.report and die) if ($given.empty? && !$yornalName)
 $yornalName or exitError "yornal name must be given, see --usage"
 Yornal.list.keys.any? $yornalName or exitError "yornal '#{$yornalName}' does not exist"
 $yornal = Yornal.new($yornalName)
 
 
-($yornal.edit ; die) if $given.empty?
+($yornal.edit and die) if $given.empty?
 
 die {
   add = Format.monthswap(opts[:add])
