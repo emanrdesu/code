@@ -1,34 +1,66 @@
 #!/usr/bin/ruby
 
+# A cli interface for http://0x0.st
+# Upload local files or from a URL
+# Delete uploaded files
+# Change expiration date of uploaded files
+
 require 'optimist'
 require 'open3'
 
-class Post
-  def self.helper(mode, x)
-    command = "curl -i -F'#{mode}=#{x}' http://0x0.st"
-    Open3.popen2(command + ' 2> /dev/null') do |i,o|
-      o.gets(nil).lines
-        .map(&:chomp)
-        .map { |l| l.split(': ') }
-    end
-  end
-
-  def self.file(file)
-    Post.helper('file', '@' + file)
-  end
-
-  def self.link(link)
-    Post.helper('url', link)
-  end
-end
+CACHE = (ENV['XDG_CACHE_DIR'] || ENV['HOME'] + '/.cache') + '/0x0'
 
 def response(x)
   status = x[0][0].split[1]
   headers = x[1..].take_while { |a| a.size > 0 }
   body = x[headers.size + 2 ..].join("\n")
 
-  [['Status', status]] + headers+ [['Body', body]]
+  headers.to_h
+    .tap { |h| h['Status'] = status }
+    .tap { |h| h['Body'] = body }
 end
 
-response(Post.file(ARGV[0]))
-  .each { |k,v| puts k + ': ' + v }
+
+class Command
+  def initialize(link='http://0x0.st')
+    @headers = {}
+    @link = link
+  end
+
+  def add_header(header, value)
+    (@headers[header] = value) if header ; self
+  end
+
+  def to_s
+    ['curl -i',
+     @headers.map { |k,v| "-F'#{k}=#{v}'" },
+     @link,
+    '2> /dev/null'
+    ].join ' '
+  end
+end
+
+class Post
+  def self.execute(command)
+    Open3.popen2(command.to_s) do |i,o|
+      o.gets(nil).lines
+        .map(&:chomp)
+        .map { |l| l.split(': ') }
+    end
+      .then &method(:response)
+  end
+
+  def self.file(file, secret=nil)
+    Command.new
+      .add_header('file', '@' + file)
+      .add_header(secret ? 'secret' : nil, '')
+      .then &Post.method(:execute)
+  end
+
+  def self.link(link, secret=nil)
+    Command.new
+      .add_header('url', link)
+      .add_header(secret ? 'secret' : nil, '')
+      .then &Post.method(:execute)
+  end
+end
