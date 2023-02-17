@@ -132,8 +132,6 @@
 ;; (optional x ,(+ 1 2)) => sets x to 3
 ;; (optional x '(+ 1 2)) => sets x to (+ 1 2)
 
-
-
 (define-macro (optional quote unquote)
   ((optional x (unquote . expr))
    (set! x (if (null? x) (begin . expr) (car x))))
@@ -181,6 +179,8 @@
 ;; RENAME + MATH
 
 (synonymize λ lambda)
+(synonymize f lambda)
+(synonymize fun lambda)
 (synonymize def define)
 
 (define (identity x) x)
@@ -252,6 +252,7 @@
 (define-values (compose compose*)
   (let ((○ (lambda (f g)
              (lambda x (f (apply g x)))))
+
         (○* (lambda (f g)
               (lambda x
                 (apply f (values->list (apply g x))))))
@@ -263,7 +264,8 @@
                   (cond ((null? fs) id)
                         ((null? (cdr fs)) (car fs))
                         (else
-                         (f (car fs) (apply (self f) (cdr fs)))))))))))
+                         (f (car fs)
+                            (apply (self f) (cdr fs)))))))))))
 
     (values (compose-with ○)
             (compose-with ○*))))
@@ -448,8 +450,8 @@
   (span-helper p '() list))
 
 
-(define take-while (compose car span))
-(define drop-while (compose cadr span))
+(define take-while (pipe span first))
+(define drop-while (pipe span second))
 
 (define (partition p list)
   (rawr foldr list '(() ())
@@ -648,8 +650,8 @@
 (define explode
   (pipe symbol->string
         string->list
-        (curry map string)
-        (curry map string->symbol)))
+        (curry map
+          (pipe string string->symbol))))
 
 (define implode
   (pipe (curry map symbol->string)
