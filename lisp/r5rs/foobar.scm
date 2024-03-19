@@ -187,7 +187,7 @@
 (define id identity)
 (define replicate make-list)
 (define mod modulo)
-(define ^ expt)
+(define (^ . ns) (foldl1 expt ns))
 
 (define pi (* (asin 1) 2))
 (define e (exp 1))
@@ -521,12 +521,10 @@
   (let ((r (drop-while (opp p) list)))
     (if (null? r) #f ((if tail? id car) r))))
 
-
 (define (find-index p list)
   ((conjoin pair? cdr)
    (find (○ p car)
          (map (x.fx (counter -1)) list))))
-
 
 (define (remove x list . test)
   (optional test eqv?)

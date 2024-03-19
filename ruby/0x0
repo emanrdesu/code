@@ -5,10 +5,15 @@
 # Delete uploaded files
 # Change expiration date of uploaded files
 
+require 'openssl'
 require 'optimist'
 require 'open3'
+require 'base64'
 
 CACHE = (ENV['XDG_CACHE_DIR'] || ENV['HOME'] + '/.cache') + '/0x0'
+SHA256 = OpenSSL::Digest.new("SHA256")
+
+### utility functions
 
 def response(x)
   status = x[0][0].split[1]
@@ -20,6 +25,16 @@ def response(x)
     .tap { |h| h['Body'] = body }
 end
 
+def exit_error(message, *args)
+  $stderr.printf message + "\n", *args
+  exit 1
+end
+
+def cache_save(cache)
+  File.write(CACHE, cache)
+end
+
+### classes
 
 class Command
   def initialize(link='http://0x0.st')
@@ -62,5 +77,30 @@ class Post
       .add_header('url', link)
       .add_header(secret ? 'secret' : nil, '')
       .then &Post.method(:execute)
+  end
+end
+
+### main
+
+opts = Optimist::options do
+  opt :file, "File(s) to upload", :type => :strings
+#  opt :link, "Link(s) to upload from", :type => :strings
+  opt :secret, "Make result URL(s) obsfuscated"
+  opt :delete, "Delete uploaded file(s) or URL(s)", :type => :strings
+  opt :view, "View uploaded file(s) and URL(s)"
+
+  conflicts :view, :file
+  conflicts :view, :delete, :secret
+end
+
+system "touch #{CACHE}"
+cache = (eval File.read(CACHE)) or {}
+
+
+if opts[:file_given]
+  opts[:file]
+    .each do |f|
+    File.exists?(f) or exit_error "File '#{f}' does not exist"
+    Post.file(f, opts[:secret])
   end
 end

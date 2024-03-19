@@ -1,0 +1,70 @@
+#!/usr/bin/ruby
+
+# terminal stopwatch program
+# press Enter to mark an entry
+# press Space to pause
+# press Control+D to exit
+
+require 'io/console'
+
+def gettime
+  Process.clock_gettime(Process::CLOCK_MONOTONIC)
+end
+
+$start_time = gettime()
+$space_count = 0
+$paused_time = 0
+$paused = false
+$paused_at = nil
+
+def get_elapsed_seconds
+  gettime() - $start_time - $paused_time
+end
+
+def format_elapsed_time(elapsed_seconds)
+  hours, remainder = elapsed_seconds.divmod(3600)
+  minutes, seconds = remainder.divmod(60)
+  milliseconds = (seconds - seconds.to_i) * 1000
+  time_format = hours > 0 ? "%02d:%02d:%02d:%03d" : "%02d:%02d:%03d"
+
+  if hours > 0
+    format(time_format, hours, minutes, seconds.to_i, milliseconds.to_i)
+  else
+    format(time_format, minutes, seconds.to_i, milliseconds.to_i)
+  end
+end
+
+def print_time
+  print "\r#{format_elapsed_time(get_elapsed_seconds)}" unless $paused
+end
+
+# thread for handling user input
+Thread.new do
+  loop do
+    case IO.console.getch
+    when "\u0004" # Ctrl+D (EOF)
+      puts "\n\n"
+      exit
+    when "\r" # Enter
+      $space_count += 1
+      puts " (#{$space_count})"
+    when " " # Space
+      $paused_at = gettime() if !$paused
+      $paused_time += gettime() - $paused_at if $paused
+      $paused = !$paused
+    end
+  end
+end
+
+begin
+  # Hide the cursor
+  print "\e[?25l"
+
+  loop do
+    print_time
+    sleep 0.1
+  end
+ensure
+  # Show the terminal
+  print "\e[?25h"
+end
