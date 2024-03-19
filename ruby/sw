@@ -4,6 +4,7 @@
 # press Enter to mark an entry
 # press Space to pause
 # press Control+D to exit
+# press jk or JK to increase/decrease timer
 
 require 'io/console'
 
@@ -52,6 +53,14 @@ Thread.new do
       $paused_at = gettime() if !$paused
       $paused_time += gettime() - $paused_at if $paused
       $paused = !$paused
+    when "j"
+      $start_time += 60
+    when "J"
+      $start_time += 60 * 10
+    when "k"
+      $start_time -= 60
+    when "K"
+      $start_time -= 60 * 10
     end
   end
 end
