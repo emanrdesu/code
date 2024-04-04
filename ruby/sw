@@ -13,13 +13,19 @@ def gettime
 end
 
 $start_time = gettime()
-$space_count = 0
+$enter_count = 0
 $paused_time = 0
+$paused_time_current = 0
 $paused = false
 $paused_at = nil
+$entered_at = nil
 
-def get_elapsed_seconds
-  gettime() - $start_time - $paused_time
+def get_elapsed_seconds(since_when = $start_time)
+  if since_when == $start_time
+    gettime() - since_when - $paused_time
+  else
+    gettime() - since_when - $paused_time_current
+  end
 end
 
 def format_elapsed_time(elapsed_seconds)
@@ -35,11 +41,24 @@ def format_elapsed_time(elapsed_seconds)
   end
 end
 
-def print_time
-  print "\r#{format_elapsed_time(get_elapsed_seconds)}" unless $paused
+def print_time(force: nil)
+  return if $paused && !force
+  print "\r#{format_elapsed_time(get_elapsed_seconds)}"
+  if $entered_at
+    print " #{format_elapsed_time(get_elapsed_seconds($entered_at))}"
+  end
 end
 
+
 # thread for handling user input
+
+def change_time(n)
+  $start_time += n
+  $entered_at += n if $entered_at
+  print_time(force: true)
+end
+
+
 Thread.new do
   loop do
     case IO.console.getch
@@ -47,20 +66,24 @@ Thread.new do
       puts "\n\n"
       exit
     when "\r" # Enter
-      $space_count += 1
-      puts " (#{$space_count})"
+      $enter_count += 1
+      $entered_at = gettime()
+      $paused_time_current = 0
+      puts " (#{$enter_count})"
+      print_time(force: true)
     when " " # Space
       $paused_at = gettime() if !$paused
       $paused_time += gettime() - $paused_at if $paused
+      $paused_time_current = gettime() - $paused_at if $paused
       $paused = !$paused
     when "j"
-      $start_time += 60
+      change_time(60)
     when "J"
-      $start_time += 60 * 10
+      change_time(600)
     when "k"
-      $start_time -= 60
+      change_time(-60)
     when "K"
-      $start_time -= 60 * 10
+      change_time(-600)
     end
   end
 end
@@ -74,6 +97,6 @@ begin
     sleep 0.1
   end
 ensure
-  # Show the terminal
+  # Show the cursor
   print "\e[?25h"
 end

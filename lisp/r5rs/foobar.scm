@@ -53,6 +53,7 @@
          with-output-to
 
          ;; MISC
+         atom?
          displayln print puts
          explode implode symbol-reverse
          compound iterate
@@ -565,13 +566,12 @@
   (optional test eqv?)
   (foldr (curyr replace test) tree xs ys))
 
-(define (map-tree f p tree . key)
+(define (map-tree f tree . key)
   (optional key id)
   (if (null? tree) '()
-      (if (not (pair? tree))
-          (if (p (key tree)) (f tree) tree)
-          (cons (map-tree f p (car tree) key)
-                (map-tree f p (cdr tree) key)))))
+      (if (atom? tree) (f tree)
+          (cons (map-tree f (car tree) key)
+                (map-tree f (cdr tree) key)))))
 
 
 (define (intersperse x list . n)
@@ -635,6 +635,9 @@
     (thunk . body)))
 
 ;; MISC
+
+(define (atom? x)
+  (not (or (pair? x) (list? x))))
 
 (define (displayln x)
   (display x) (newline))
