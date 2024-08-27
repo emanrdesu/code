@@ -1,6 +1,6 @@
 <script>
+  import Search from "./Search.svelte";
   import Section from "./Section.svelte";
-  const size = 42;
 
   const data = [
     {
@@ -74,8 +74,11 @@
   <title>Home</title>
 </svelte:head>
 
-<div class="hero min-w-44 w-screen h-screen">
-  <div class="hero-content text-center">
+<div class="hero pt-4 min-w-44 w-screen h-screen">
+  <div class="hero-content p-0 text-center flex flex-col">
+    <span class="w-full">
+      <Search />
+    </span>
     <div>
       <div id="chan">
         <Section icon={data[0].icon} color={data[0].color} links={data[0].links}
