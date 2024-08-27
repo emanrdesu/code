@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import "daisyui";
+
+:root {
+  background-color: #2b2e3b;
+}
+
+svg {
+  width: 42px;
+  height: 42px;
+}
