@@ -1,4 +1,5 @@
 <script>
+  import Icon from "./Icon.svelte";
   import Search from "./Search.svelte";
   import Section from "./Section.svelte";
 
@@ -23,7 +24,7 @@
       icon: "person",
       color: "rgb(147, 197, 253)",
       links: [
-        { href: "https://chase.com", text: "bank" },
+        { href: "https://app.dataannotation.tech", text: "work" },
         { href: "https://chat.openai.com/chat", text: "chatgpt" },
         { href: "https://mail.cock.li", text: "mail" },
         { href: "http://192.168.0.1", text: "router" },
@@ -68,18 +69,31 @@
       ],
     },
   ];
+
+  const icons = [
+    { icon: "whatsapp", color: "#25D366", link: "https://web.whatsapp.com" },
+    { icon: "gemini", color: "#7675C8", link: "https://gemini.google.com" },
+    { icon: "chase", color: "#126BC5", link: "https://chase.com" },
+  ];
 </script>
 
 <svelte:head>
   <title>Home</title>
 </svelte:head>
 
-<div class="hero pt-4 min-w-44 w-screen h-screen">
-  <div class="hero-content p-0 text-center flex flex-col">
+<div class="hero pt-8 min-w-44 w-screen h-screen">
+  <div class="hero-content justify-center text-center flex flex-col">
+    {#if navigator.onLine}
+      <small class="fixed right-3 bottom-2 italic">
+        {#await fetch("http://ifconfig.me/ip").then((r) => r.text()) then ip}
+          {ip}
+        {/await}
+      </small>
+    {/if}
     <span class="w-full">
       <Search />
     </span>
-    <div>
+    <div class="section-container">
       <div id="chan">
         <Section icon={data[0].icon} color={data[0].color} links={data[0].links}
         ></Section>
@@ -88,11 +102,16 @@
         <Section {color} {icon} {links}></Section>
       {/each}
     </div>
+    <div class="flex flex-wrap gap-8">
+      {#each icons as { icon, color, link }}
+        <Icon {icon} {color} {link}></Icon>
+      {/each}
+    </div>
   </div>
 </div>
 
 <style>
-  div.hero-content > div {
+  .section-container {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -104,13 +123,13 @@
   }
 
   @media (min-width: 45ch) {
-    div.hero-content > div {
+    .section-container {
       grid-template-columns: 1fr 1fr;
     }
   }
 
   @media (min-width: 63ch) {
-    div.hero-content > div {
+    .section-container {
       grid-template-columns: repeat(3, 1fr);
     }
 
