@@ -24,8 +24,7 @@
       icon: "person",
       color: "rgb(147, 197, 253)",
       links: [
-        { href: "https://app.dataannotation.tech", text: "work" },
-        { href: "https://chat.openai.com/chat", text: "chatgpt" },
+        { href: "https://app.dataannotation.tech/users/sign_in", text: "work" },
         { href: "https://mail.cock.li", text: "mail" },
         { href: "http://192.168.0.1", text: "router" },
       ],
@@ -37,7 +36,7 @@
       links: [
         { href: "https://hues.kepstin.ca", text: "hues" },
         { href: "https://spook.mon.im/", text: "spook" },
-        { href: "https://horror.0x40hu.es", text: "horror" },
+        { href: "https://0x40.mon.im/", text: "mon" },
         { href: "https://420.mon.im/snoop.html", text: "420" },
       ],
     },
@@ -73,7 +72,8 @@
   const icons = [
     { icon: "whatsapp", color: "#25D366", link: "https://web.whatsapp.com" },
     { icon: "gemini", color: "#7675C8", link: "https://gemini.google.com" },
-    { icon: "chase", color: "#126BC5", link: "https://chase.com" },
+    { icon: "openai", color: "#b3b3cc", link: "https://chat.openai.com/chat" },
+    { icon: "chase", color: "#1680e9", link: "https://chase.com" },
   ];
 </script>
 
@@ -90,9 +90,17 @@
         {/await}
       </small>
     {/if}
+
+    <div class="flex flex-wrap gap-8 mb-6">
+      {#each icons as { icon, color, link }}
+        <Icon {icon} {color} {link}></Icon>
+      {/each}
+    </div>
+
     <span class="w-full">
       <Search />
     </span>
+
     <div class="section-container">
       <div id="chan">
         <Section icon={data[0].icon} color={data[0].color} links={data[0].links}
@@ -100,11 +108,6 @@
       </div>
       {#each data.slice(1) as { color, icon, links }}
         <Section {color} {icon} {links}></Section>
-      {/each}
-    </div>
-    <div class="flex flex-wrap gap-8">
-      {#each icons as { icon, color, link }}
-        <Icon {icon} {color} {link}></Icon>
       {/each}
     </div>
   </div>
