@@ -4,99 +4,188 @@
 # press Enter to mark an entry
 # press Space to pause
 # press Control+D to exit
-# press jk or JK to increase/decrease timer
+# press hl, jk or JK to increase/decrease timer
 
 require 'io/console'
+require 'fileutils'
 
-def gettime
-  Process.clock_gettime(Process::CLOCK_MONOTONIC)
-end
+class Timer
+  def initialize(idle:)
+    @start = Program.elapsed
+    @paused = { at: nil, total: 0, time: 0, now?: false }
+    @enter = { count: 0, at: nil }
+    @shown = nil
 
-$start_time = gettime()
-$enter_count = 0
-$paused_time = 0
-$paused_time_current = 0
-$paused = false
-$paused_at = nil
-$entered_at = nil
+    # Thread for handling user input
+    Thread.new do
+      change = {
+        "h" => 1,  "l" => -1,
+        "j" => 60, "k" => -60,
+        "J" => 600, "K" => -600
+      }
 
-def get_elapsed_seconds(since_when = $start_time)
-  if since_when == $start_time
-    gettime() - since_when - $paused_time
-  else
-    gettime() - since_when - $paused_time_current
+      loop do
+        key = nil
+        case key = IO.console.getch
+        when "\u0004" # Ctrl+D (EOF)
+          puts "\n\n"
+          exit
+        when "\r" # Enter
+          @enter[:count] += 1
+          @enter[:at] = Program.elapsed
+          @paused[:time] = 0
+          puts " (#{@enter[:count]})"
+          print(force: true)
+        when " "
+          toggle
+        when *change.keys
+          self.change(change[key])
+        end
+      end
+    end
+
+    # Thread for writing to timer file
+    Thread.new do
+      loop do
+        queue = Program.instances.sort_by { |pid| Program.elapsed(pid) }
+
+        # If current instance is the oldest
+        if Process.pid == queue.last
+          # Check if lock file exists and delete it if current instance is the only one
+          if File.exist?(Program.file[:lock]) && queue.size == 1
+            File.delete(Program.file[:lock])
+          end
+
+          begin
+            File.open(Program.file[:lock], File::CREAT | File::EXCL) do
+              # Got the lock! Write to timer file until program exits.
+
+              # Keep track of timer saved into timer file
+              timer = @shown
+
+              loop do
+                if !paused? || (timer != @shown)
+                  File.write(Program.file[:timer], timer = @shown || string)
+                end
+
+                sleep idle
+              end
+            end
+          rescue Errno::EEXIST
+            # Lock file already exists, another instance is running.
+            # Do nothing.
+          end
+        end
+
+        sleep idle
+      end
+    end
+  end
+
+  def elapsed(total: true)
+    period = total ? @start + @paused[:total] : @enter[:at] + @paused[:time]
+    Program.elapsed - period
+  end
+
+  def format(seconds = elapsed)
+    hours, remainder = seconds.divmod(3600)
+    minutes, seconds = remainder.divmod(60)
+    milliseconds = (seconds - seconds.to_i) * 1000
+    string = hours > 0 ? "%02d:%02d:%02d:%03d" : "%02d:%02d:%03d"
+
+    hours > 0 ?
+      Kernel::format(string, hours, minutes, seconds.to_i, milliseconds.to_i) :
+      Kernel::format(string, minutes, seconds.to_i, milliseconds.to_i)
+  end
+
+  def string
+    format + (@enter[:at] ? " #{format(elapsed(total: nil))}" : "")
+  end
+
+  # set `@shown` for synchronization with timer file
+  def print(force: false)
+    return if paused? && !force
+    Kernel::print "\r#{@shown = string}"
+  end
+
+  def change(seconds)
+    @start += seconds
+    @enter[:at] += seconds if @enter[:at]
+    print(force: true)
+  end
+
+  def toggle
+    now = Program.elapsed
+    @paused[:at] =  now if !paused?
+    @paused[:total] += now - @paused[:at] if paused?
+    @paused[:time] = now - @paused[:at] if paused?
+    @paused[:now?] = !@paused[:now?]
+  end
+
+  def paused?
+    @paused[:now?]
   end
 end
 
-def format_elapsed_time(elapsed_seconds)
-  hours, remainder = elapsed_seconds.divmod(3600)
-  minutes, seconds = remainder.divmod(60)
-  milliseconds = (seconds - seconds.to_i) * 1000
-  time_format = hours > 0 ? "%02d:%02d:%02d:%03d" : "%02d:%02d:%03d"
 
-  if hours > 0
-    format(time_format, hours, minutes, seconds.to_i, milliseconds.to_i)
-  else
-    format(time_format, minutes, seconds.to_i, milliseconds.to_i)
+class Program
+  def self.name
+    File.basename(__FILE__)
   end
-end
 
-def print_time(force: nil)
-  return if $paused && !force
-  print "\r#{format_elapsed_time(get_elapsed_seconds)}"
-  if $entered_at
-    print " #{format_elapsed_time(get_elapsed_seconds($entered_at))}"
+  directory = File.expand_path(ENV['XDG_CACHE_HOME'] || "~/.cache") + "/#{Program.name}"
+  FileUtils.mkdir_p(directory)
+
+  @@file = {
+    lock: File.join(directory, 'lock'),
+    timer: File.join(directory, 'timer')
+  }
+
+  def self.file
+    @@file
   end
-end
 
+  def self.run(sleep:, idle:)
+    timer = Timer.new(idle:)
 
-# thread for handling user input
+    # Hide the cursor
+    print "\e[?25l"
 
-def change_time(n)
-  $start_time += n
-  $entered_at += n if $entered_at
-  print_time(force: true)
-end
+    begin
+      loop do
+        timer.print
+        Kernel::sleep sleep
+      end
+    ensure
+      print "\e[?25h" # Show the cursor
+      File.delete(@@file[:lock]) if File.exist?(@@file[:lock])
+    end
+  end
 
+  def self.instances
+    `ps -eo pid,command`.lines.grep(/ruby/).grep(Regexp.new(Program.name))
+      .map(&:strip).map(&:split).map { |n, *| n.to_i }
+  end
 
-Thread.new do
-  loop do
-    case IO.console.getch
-    when "\u0004" # Ctrl+D (EOF)
-      puts "\n\n"
-      exit
-    when "\r" # Enter
-      $enter_count += 1
-      $entered_at = gettime()
-      $paused_time_current = 0
-      puts " (#{$enter_count})"
-      print_time(force: true)
-    when " " # Space
-      $paused_at = gettime() if !$paused
-      $paused_time += gettime() - $paused_at if $paused
-      $paused_time_current = gettime() - $paused_at if $paused
-      $paused = !$paused
-    when "j"
-      change_time(60)
-    when "J"
-      change_time(600)
-    when "k"
-      change_time(-60)
-    when "K"
-      change_time(-600)
+  def self.elapsed(pid = Process.pid)
+    return Process.clock_gettime(Process::CLOCK_MONOTONIC) if pid == Process.pid
+
+    timer = `ps -p #{pid} -o pid,etime`.lines[1].split[1]
+    parts = timer.split(":").map(&:to_i)
+
+    case parts.size
+    when 3 # "hh:mm:ss"
+      parts[0] * 3600 + parts[1] * 60 + parts[2]
+    when 2 # "mm:ss"
+      parts[0] * 60 + parts[1]
+    when 1 # "ss"
+      parts[0]
     end
   end
 end
 
-begin
-  # Hide the cursor
-  print "\e[?25l"
 
-  loop do
-    print_time
-    sleep 0.1
-  end
-ensure
-  # Show the cursor
-  print "\e[?25h"
-end
+Program.run **{
+  sleep: 0.1,
+  idle: 60
+}

@@ -1,0 +1,48 @@
+#!/usr/bin/ruby
+require 'fileutils'
+
+base = ENV['XDG_CACHE_HOME'] || File.join(ENV['HOME'], '.cache')
+$cache = File.join(base, 'toggle')
+
+def toggle(name)
+  path = File.join($cache, name)
+
+  unless File.exist?(path)
+    File.write(path, '1')
+    return true
+  end
+
+  value = File.read(path).to_i
+  File.write(path, (1 - value).to_s)
+
+  value == 1
+end
+
+def deftoggle(x, on:, off:)
+  define_method(x) do
+    if toggle(x.to_s)
+      on.each(&method(:system))
+    else
+      off.each(&method(:system))
+    end
+  end
+end
+
+deftoggle(:polybar,
+          on: ['bspc config top_padding 42',
+               'polybar-msg cmd show'],
+          off: ['bspc config top_padding 0',
+                'polybar-msg cmd hide'])
+
+deftoggle(:unclutter, on: ['unclutter -idle 1 &'], off: ['pkill unclutter'])
+deftoggle(:picom, on: ['setsid picom &'], off: ['killall -q picom'])
+
+ARGV.empty? and exit
+command = ARGV[0]
+
+begin
+  eval(command)
+rescue StandardError
+  puts 'Unknown command.'
+  exit 1
+end
